@@ -357,3 +357,106 @@ calibPlot <- function(predDF) {
                      labels = c("A", "B"),label_size=10,vjust=1.75,hjust=-2)
   return(prow)
 }
+
+getDrawPredictions <- function(imputeDF,draw=1) {
+  if(draw==1) {
+    imputeDF <- imputeDF %>% select(-`5 Minute`,-overOne_2) %>% 
+      mutate(overOne_2 = factor(ifelse(`1st Draw` > 0,TRUE,FALSE))) %>% 
+      select(-`1st Draw`)
+  }
+  if(draw==5) {
+    imputeDF <- imputeDF %>% select(-`1st Draw`,-overOne_2) %>% 
+      mutate(overOne_2 = factor(ifelse(`5 Minute` > 0,TRUE,FALSE))) %>% 
+      select(-`5 Minute`)
+  }
+  mlDF2 <- imputeDF %>% filter(tested) 
+  mlDF2 <- mlDF2 %>% 
+    select(-tested,-`2-3 Minute`,
+           -HHsInternetPropBG,-pCompletePlumbingFacilitiesBG,
+           -HHsHasComputerPropBG,-pOccupiedHousesBG,-sequential,
+           -pRenterOccupiedHousesBG,-`Date Sampled`) %>%  #remove redundant features
+    mutate(censusTract = factor(censusTract),
+           CA = factor(CA),
+           blockNum = factor(blockNum),
+           blockGroup = factor(blockGroup),
+    )
+  split_df2 <- group_initial_split(mlDF2,group=blockNum) #keep blocks in same split
+  trainDF2 <- training(split_df2)
+  testDF2 <- testing(split_df2)
+  tree_rec2 <- recipe(overOne_2 ~ ., data = trainDF2) %>% 
+    update_role(blockNum, new_role="ID")
+  
+  #lightgbm specification
+  tune_spec2 <- boost_tree(
+    min_n = tune(),
+    trees = 1000,
+    tree_depth = tune()) %>% 
+    set_mode("classification") %>% 
+    set_engine("lightgbm")
+  tune_wf2 <- workflow() %>%
+    add_recipe(tree_rec2) %>% 
+    add_model(tune_spec2)
+  
+  trees_folds3 <- group_vfold_cv(trainDF2,group=blockNum,v=3)
+  
+  
+  tune_res_final2 <- tune_grid(
+    tune_wf2,
+    resamples = trees_folds3,
+    grid = 5
+  )
+  tune_res_final2 %>%
+    tune::show_best(metric = "roc_auc",n = 5) %>% print()
+  best_tree2 <- tune_res_final2 %>%
+    select_best("roc_auc")
+  final_wf2 <- 
+    tune_wf2 %>% 
+    finalize_workflow(best_tree2)
+  final_fit2 <- 
+    final_wf2 %>%
+    last_fit(split_df2)
+  final_fit2 %>% 
+    collect_metrics() %>% print()
+  
+  #make calibrated risk predictions
+  predSplits <- group_initial_split(mlDF2,group=blockNum,prop=1/2)
+  split1 <- training(predSplits)
+  split2 <- testing(predSplits)
+  
+  splitDF1 <- fitSplit(dataSplit = split1, testData=split2,gridNum=10)
+  splitDF2 <- fitSplit(dataSplit = split2, testData=split1,gridNum=10)
+  
+  riskDF <- rbind(splitDF1,splitDF2)
+  riskDFname <- paste0("data/processed/riskDF_pt1_draw",draw,".csv")
+  write_csv(riskDF,riskDFname)
+  
+  imputeDF <- imputeDF %>%
+    select(-`2-3 Minute`,
+           -HHsInternetPropBG,-pCompletePlumbingFacilitiesBG,
+           -HHsHasComputerPropBG,-pOccupiedHousesBG,-sequential,
+           -pRenterOccupiedHousesBG,-`Date Sampled`) %>%  #remove redundant features
+    mutate(censusTract = factor(censusTract),
+           CA = factor(CA),
+           blockNum = factor(blockNum),
+           blockGroup = factor(blockGroup),
+    )
+  propensity_train <- imputeDF %>% filter(tested==T) %>% 
+    select(-tested)
+  propensity_test <- imputeDF %>% filter(tested==F) %>% 
+    select(-tested)
+  withoutTestsPreds <- fitSplit(dataSplit = propensity_train,
+                                testData=propensity_test,gridNum=5)
+  withoutTests <- withoutTestsPreds %>% 
+    rename(preds = rawPreds) %>% 
+    select(blockNum,preds,calibPreds)
+  withTests <- riskDF %>% 
+    rename(preds = rawPreds) %>% 
+    select(blockNum,preds,calibPreds)
+  riskDF2 <- rbind(withTests,withoutTests)
+  riskDFnameFinal <- paste0("data/processed/riskDF_draw",draw,".csv")
+  write_csv(riskDF2,riskDFnameFinal)
+  return(riskDF2)
+}
+
+
+

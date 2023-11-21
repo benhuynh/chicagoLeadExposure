@@ -2,18 +2,20 @@ library(readr)
 library(tidymodels)
 library(bonsai)
 library(probably)
+library(lubridate)
 source("00_functions.R")
 imputeDF <- read_csv("data/processed/imputeDF.csv")
 mlDF <- imputeDF %>% filter(tested) %>% 
   select(-tested,-`1st Draw`,-`2-3 Minute`,-`5 Minute`,
          -HHsInternetPropBG,-pCompletePlumbingFacilitiesBG,
          -HHsHasComputerPropBG,-pOccupiedHousesBG,-sequential,
-         -pRenterOccupiedHousesBG) %>%  #remove redundant features
+         -pRenterOccupiedHousesBG,-`Date Sampled`) %>%  #remove redundant features
   mutate(overOne_2 = factor(overOne_2),
          censusTract = factor(censusTract),
          CA = factor(CA),
          blockNum = factor(blockNum),
-         blockGroup = factor(blockGroup))
+         blockGroup = factor(blockGroup),
+         )
 
 split_df2 <- group_initial_split(mlDF,group=blockNum) #keep blocks in same split
 trainDF2 <- training(split_df2)

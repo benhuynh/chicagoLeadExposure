@@ -6,19 +6,35 @@ library(censusxy)
 library(rusps)
 library(XML)
 library(readr)
-Results <- read_excel("data/Results.xlsx", 
+Results <- read_excel("data/Results_11_10_2023.xlsx", 
                       skip = 2) #warnings are just empty notes at end of dataset
-Results_sequential <- read_excel("data/Results.xlsx",
+Results_sequential <- read_excel("data/Results_11_10_2023.xlsx",
                                  sheet = "Sequential", skip = 2)
+#renaming columns to be equivalent to old versions of dataset
+Results <- Results %>% rename(`Date Sampled` = `Sample Date`,
+                              `2-3 Minute` = `2/3 Min`,
+                              `5 Minute` = `5 Min`)
+
+
+
+print(paste0(
+  Results %>% filter(is.na(`Date Sampled`)) %>% nrow(),
+  " NA observations to be removed.")) #Customers who signed up but did not take test
+
+
 Results <- Results %>% 
   filter(!is.na(`Date Sampled`)) %>% 
-  mutate(Address = toupper(Address))#removing 137 NA results
+  mutate(Address = toupper(Address))
 print(paste0(Results %>% filter(is.na(`2-3 Minute`)) %>% nrow(),
              " observations need to be matched with data from sequential spreadsheet."))
 
+print(paste0(
+  Results_sequential %>% filter(is.na(`Date Sampled`)) %>% nrow(),
+  " NA observations to be removed.")) #Empty rows
+
 Results_sequential2 <- Results_sequential %>% 
   select(`Date Sampled`,Address,`1st Draw`,`3 Minute`,`5 Minute`) %>% 
-  filter(!is.na(`Date Sampled`)) %>%  #removing 7 NA results
+  filter(!is.na(`Date Sampled`)) %>%  
   mutate(Address = toupper(Address))
 
 missingResults <- Results %>% filter(is.na(`2-3 Minute`))
@@ -61,7 +77,8 @@ df_sf2 <- df_sf %>% cbind(Results[-2])
 write_csv(df_sf2,"data/processed/df1_GC.csv")
 
 naDF <- subset(df_sf2,is.na(cxy_tract_id))
-dim(naDF) #346 missing observations
+print(paste0(nrow(naDF)," missing observations"))
+
 naDF$Address2 <- sub("(\\d+)30(\\s+\\w+)", "\\149\\2", naDF$Address) #some are missing because address isn't residential, try other
 naDF <- naDF %>% select(-5:-10)
 naDF_GC <- cxy_geocode(naDF, street = "Address2", 
@@ -76,7 +93,8 @@ write_csv(naDF_GC,"data/processed/naDF_GC.csv")
 naDF2 <- naDF_GC %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-16)
-dim(naDF2) #200 missing
+print(paste0(nrow(naDF2)," missing observations"))
+
 naDF2$Address2 <- sub("(\\d+)30(\\s+\\w+)", "\\107\\2", naDF2$Address) #some are missing because address isn't residential, try other
 naDF_GC2 <- cxy_geocode(naDF2, street = "Address2", 
                        city = "City", 
@@ -91,7 +109,7 @@ write_csv(naDF_GC2,"data/processed/naDF_GC2.csv")
 naDF3 <- naDF_GC2 %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-16)
-dim(naDF3) #190 missing
+print(paste0(nrow(naDF3)," missing observations"))
 naDF3$Address2 <- sub("(\\d+)30(\\s+\\w+)", "\\100\\2", naDF3$Address) #some are missing because address isn't residential, try other
 naDF_GC3 <- cxy_geocode(naDF3, street = "Address2", 
                         city = "City", 
@@ -106,7 +124,8 @@ write_csv(naDF_GC3,"data/processed/naDF_GC3.csv")
 naDF4 <- naDF_GC3 %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-16)
-dim(naDF4) #186 missing
+print(paste0(nrow(naDF4)," missing observations"))
+
 naDF4$Address2 <- sub("(\\d+)30(\\s+\\w+)", "\\150\\2", naDF4$Address) #some are missing because address isn't residential, try other
 naDF_GC4 <- cxy_geocode(naDF4, street = "Address2", 
                         city = "City", 
@@ -121,7 +140,7 @@ write_csv(naDF_GC4,"data/processed/naDF_GC4.csv")
 naDF5 <- naDF_GC4 %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-16)
-dim(naDF5) #180 missing
+print(paste0(nrow(naDF5)," missing observations"))
 
 #fixing typos in the data entry
 naDF5$Address <- str_replace(naDF5$Address, "100030 S OAKLEY AVE", "10030 S OAKLEY AVE")
@@ -147,7 +166,7 @@ write_csv(naDF_GC5,"data/processed/naDF_GC5.csv")
 naDF6 <- naDF_GC5 %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-16) %>% filter(!is.na(Address))
-dim(naDF6) #155 missing
+print(paste0(nrow(naDF6)," missing observations"))
 
 naDF6$number <- as.numeric(gsub("\\D", "", naDF6$Address))
 naDF6$street <- gsub("\\d+", "", naDF6$Address)
@@ -170,7 +189,7 @@ write_csv(naDF_GC6,"data/processed/naDF_GC6.csv")
 naDF7 <- naDF_GC6 %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-20) %>% filter(!is.na(Address))
-dim(naDF7) #155 missing
+print(paste0(nrow(naDF7)," missing observations"))
 naDF7$Address <- gsub("CREIGER", "CREGIER", naDF7$Address)
 naDF7$Address <- gsub("101STST", "101ST ST", naDF7$Address)
 naDF7$Address <- gsub("AVE GARDEN", "AVE", naDF7$Address)
@@ -234,7 +253,7 @@ write_csv(naDF_GC7,"data/processed/naDF_GC7.csv")
 naDF8 <- naDF_GC7 %>% 
   filter(is.na(cxy_tract_id)) %>%
   select(-11:-16) %>% filter(!is.na(Address))
-dim(naDF8) #130 missing total
+print(paste0(nrow(naDF8)," missing observations"))
 
 naDF_GC6 <- naDF_GC6 %>% select(-11:-14) #remove regex columns before merging
 

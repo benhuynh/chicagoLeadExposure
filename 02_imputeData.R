@@ -30,7 +30,7 @@ leadExposure2 <- leadExposure %>%
          blockNum = paste0(CensusTract,cxy_block_id),
          censusTract = str_sub(blockNum,start=1,end=11),
          overOne_2 = `2-3 Minute`>=1) %>% 
-  select(blockGroup,blockNum,censusTract,overOne_2,sequential,`1st Draw`,
+  select(blockGroup,blockNum,censusTract,`Date Sampled`,overOne_2,sequential,`1st Draw`,
          `2-3 Minute`, `5 Minute`) %>% 
   mutate(`5 Minute` = ifelse(sequential & `5 Minute`==0,`2-3 Minute`,`5 Minute`))
 tractDF$GEOID <- as.character(tractDF$GEOID)

@@ -74,7 +74,7 @@ gcDF$year <- buildings2$YEAR_BUILT
 
 write_csv(gcDF,"data/processed/buildingAge.csv")
 buildingAge <- read_csv("data/processed/buildingAge.csv")
-buildingAge$age <- 2022-buildingAge$year
+buildingAge$age <- 2023-buildingAge$year
 buildingAge2 <- buildingAge %>% 
   filter(!is.na(cxy_block_id)) %>% 
   mutate(blockNum = paste0("17031",cxy_tract_id,cxy_block_id)) %>% 
