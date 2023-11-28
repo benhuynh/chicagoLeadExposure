@@ -403,7 +403,7 @@ getDrawPredictions <- function(imputeDF,draw=1) {
   tune_res_final2 <- tune_grid(
     tune_wf2,
     resamples = trees_folds3,
-    grid = 5
+    grid = 15
   )
   tune_res_final2 %>%
     tune::show_best(metric = "roc_auc",n = 5) %>% print()
@@ -445,7 +445,7 @@ getDrawPredictions <- function(imputeDF,draw=1) {
   propensity_test <- imputeDF %>% filter(tested==F) %>% 
     select(-tested)
   withoutTestsPreds <- fitSplit(dataSplit = propensity_train,
-                                testData=propensity_test,gridNum=5)
+                                testData=propensity_test,gridNum=10)
   withoutTests <- withoutTestsPreds %>% 
     rename(preds = rawPreds) %>% 
     select(blockNum,preds,calibPreds)

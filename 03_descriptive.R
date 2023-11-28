@@ -23,4 +23,22 @@ ggplot(plotDF, aes(x=month,y=med,group=1)) +
 ggplot(plotDF, aes(x=month,y=rate,group=1)) +
   geom_line() + 
   theme_classic()
+
+sum(testedDF$`1st Draw` >= 1)/nrow(testedDF)
+sum(testedDF$`1st Draw` >= 5)/nrow(testedDF)
+sum(testedDF$`1st Draw` >= 15)/nrow(testedDF)
+
+sum(testedDF$`2-3 Minute` >= 1)/nrow(testedDF)
+sum(testedDF$`2-3 Minute` >= 5)/nrow(testedDF)
+sum(testedDF$`2-3 Minute` >= 15)/nrow(testedDF)
+
+sum(testedDF$`5 Minute` >= 1)/nrow(testedDF)
+sum(testedDF$`5 Minute` >= 5)/nrow(testedDF)
+sum(testedDF$`5 Minute` >= 15)/nrow(testedDF)
+
+
+
+
+
+
   
