@@ -148,11 +148,15 @@ simIQDensity <- function(simDF) {
 
 simFunc <- function(simDF,norm=T,meansVec=meansVec,adjustBLL=T,
                     calib=T) {
+  #incorporate code to count unfiltered exposures
   simMat <- matrix(nrow=10000,ncol=20)
   for(i in 1:10000)  {
     coef1 <- runif(1,.38,.86)
     coef2 <- runif(1,.12,.26)
     coef3 <- runif(1,.07,.15)
+    simDF_HCS <- simDF %>% select(CA,lower_Unfiltered,upper_Unfiltered) %>% distinct()
+    simDF_HCS$simFiltered <- runif(nrow(simDF_HCS),simDF_HCS$lower_Unfiltered,simDF_HCS$upper_Unfiltered)
+    simDF <- simDF %>% left_join(simDF_HCS %>% select(CA,simFiltered),by="CA")
     
     if(adjustBLL) {
       bllIncreaseConstant <- runif(1,exp(.09),exp(.33))
@@ -176,6 +180,7 @@ simFunc <- function(simDF,norm=T,meansVec=meansVec,adjustBLL=T,
     }
     
     simDF$expChildren <- simDF$simulatedTruth*simDF$simBlockPop*simDF$simPunder6
+    simDF$expChildrenUnfiltered <- simDF$expChildren*simDF$simFiltered
     simDF$leadConcentration <- concentrationSampVec[,i]
     if(norm) {
       simDF$baseLineBLL <- rTruncNormCorrected(nrow(simDF),SD=SD,m=meansVec)
