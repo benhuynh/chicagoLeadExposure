@@ -12,6 +12,9 @@ riskDF <- read_csv("data/processed/riskDF.csv")
 propensitiesDF <- read_csv("data/processed/imputeDF.csv")
 bgMOE <- read_csv("data/processed/blockGroupMOEData2.csv")
 tractsToCA <- read_csv("data/2020 Census Tracts to Chicago Community Area Equivalency File - Sheet1.csv")
+hcsDF <- read_csv("data/processed/hcsResults.csv")
+
+hcsDF2 <- hcsDF %>% select(CA,percent_Unfiltered,lower_Unfiltered,upper_Unfiltered)
 
 childrenDF <- propensitiesDF %>% select(blockPopulation,blockGroup,totalPopulationBG,
                                              propWhiteBlockPop,censusTract,Population,
@@ -38,8 +41,9 @@ riskDF <- riskDF %>% distinct()
 riskDF$blockNum <- as.character(riskDF$blockNum)
 childrenDF$blockNum <- as.character(childrenDF$blockNum)
 simDF <- childrenDF %>% left_join(riskDF,by=c("blockNum"="blockNum")) %>% 
-  distinct(blockNum,.keep_all=T) 
-simDF <- simDF %>% left_join(tractsToCA,by=c("censusTract"="GEOID20"))
+  distinct(blockNum,.keep_all=T)
+simDF <- simDF %>% left_join(tractsToCA,by=c("censusTract"="GEOID20")) %>% 
+  left_join(hcsDF2,by=c("CA"="CA"))
 simDF$calibPreds <- 1-simDF$calibPreds #originally predicting FALSE, switch signs
 simDF$preds <- 1-simDF$preds
 simDF$predClass <- simDF$preds>=.5

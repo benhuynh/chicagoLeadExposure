@@ -33,11 +33,12 @@ colnames(caNum) <-
     )
 #match with CA numbers to make sure correct
 #
+write_csv(caNum,"data/processed/hcsResults.csv")
 
 nc = st_read("data/Comm_20Areas__1_/CommAreas.shp")
 caNum$CA <- factor(caNum$CA)
 
-caNum <- caNum %>% left_join(nc,by=c("CA"="AREA_NUM_1"))
+caNum2 <- caNum %>% left_join(nc,by=c("CA"="AREA_NUM_1"))
 
 caFilterPlot <- ggplot() + 
   geom_sf(data=caNum, aes(fill=percent_Unfiltered,
