@@ -87,11 +87,6 @@ print(paste0(sum(!(simDF2$CA %in% concDF2$CA))," CAs aren't represented in the l
 concentrationSampVec <- t(sapply(simDF2$concList,sample,10000,T))
 concentrationSampVec <- ifelse(concentrationSampVec>10,10,concentrationSampVec)
 
-meanLead = 2.1 #most recent illinois average BLL
-pct = .018 #most recent chicago >5 lead ug/DL percentage
-zscore = qnorm(1-pct)
-SD = (5-meanLead)/zscore #calculate SD based on known Mean and % over 5
-
 length(simDF2$LDPP_2021[simDF2$LDPP_2021==0]) #821 blocks (3 CAs) with 0 LDPP
 meansVec <- 5-SD*qnorm(1-simDF2$LDPP_2021/100) #calculate new means for each CA, keeping SD constant
 meansVec <- ifelse(is.infinite(meansVec),NA,meansVec)
@@ -101,24 +96,14 @@ meansVec <- ifelse(is.na(meansVec),min(meansVec,na.rm=T)/2,meansVec)
 simDF2$totalPopulation_MOE95 <- simDF2$totalPopulation_MOE/qnorm(.95)*qnorm(.975)
 simDF2$pAllChildrenUnder6BG_MOE95 <- simDF2$pAllChildrenUnder6BG_MOE/qnorm(.95)*qnorm(.975)
 
-simMatDF <- simFunc(simDF=simDF2,norm=T,meansVec=meansVec)
+simMatDF <- simFunc(simDF=simDF2,meansVec=meansVec)
 write_csv(simMatDF,paste0("data/processed/simResults_",now(),".csv"))
-simMatDF_uni <- simFunc(simDF=simDF2,norm=F,meansVec=meansVec)
-write_csv(simMatDF_uni,paste0("data/processed/simResults_uni_",now(),".csv"))
-simMatDF_bll_unadj <- simFunc(simDF=simDF2,norm=T,meansVec=meansVec,adjustBLL=F)
+simMatDF_bll_unadj <- simFunc(simDF=simDF2,meansVec=meansVec,adjustBLL=F)
 write_csv(simMatDF_bll_unadj,paste0("data/processed/simResults_bll_unadj_",now(),".csv"))
 simMatDF_uncalib <- simFunc(simDF=simDF2,meansVec=meansVec,calib=F)
 write_csv(simMatDF_uncalib,paste0("data/processed/simResults_uncalib_",now(),".csv"))
 
-
 summary(simMatDF)
-
-earningsPerIQ = 1.54*17815
-print(paste0("Estimated lifetime earnings lost: ",earningsPerIQ*median(simMatDF$TotalIQLoss))) 
-print(summary(simMatDF$iqLoss95_T))
-print(paste0("Uncertainty interval for top 95th percentile of IQ loss: ",
-             as.numeric(quantile(simMatDF$iqLoss95_T,probs=c(0.05,0.5,0.95)))))
-
 
 simAggTable2 <- generateSimAggTable(simMatDF)
 simAggTable_uni <- generateSimAggTable(simMatDF_uni)
