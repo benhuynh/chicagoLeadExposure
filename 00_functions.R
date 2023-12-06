@@ -149,6 +149,7 @@ simIQDensity <- function(simDF) {
 simFunc <- function(simDF,norm=T,meansVec=meansVec,adjustBLL=T,
                     calib=T) {
   #incorporate code to count unfiltered exposures
+  #incorporate code to only count relative BLL increase based on unfiltered exposure
   simMat <- matrix(nrow=10000,ncol=20)
   for(i in 1:10000)  {
     coef1 <- runif(1,.38,.86)
@@ -182,51 +183,29 @@ simFunc <- function(simDF,norm=T,meansVec=meansVec,adjustBLL=T,
     simDF$expChildren <- simDF$simulatedTruth*simDF$simBlockPop*simDF$simPunder6
     simDF$expChildrenUnfiltered <- simDF$expChildren*simDF$simFiltered
     simDF$leadConcentration <- concentrationSampVec[,i]
-    if(norm) {
-      simDF$baseLineBLL <- rTruncNormCorrected(nrow(simDF),SD=SD,m=meansVec)
-    } else {
-      simDF$baseLineBLL <- runif(nrow(simDF),0,5*(1+simDF$LDPP_2021/100))
-    }
-    simDF$baseLineBLL[simDF$baseLineBLL<0] <- 0
-    simDF$simBLL <- simDF$baseLineBLL/(bllIncreaseConstant^simDF$leadConcentration)
-    simDF$iqLoss <- mapply(calcIQLoss2,sim=simDF$simBLL,
-                           bl=simDF$baseLineBLL,c1=coef1,c2=coef2)
-    simDF$totalIQLoss <- simDF$iqLoss*simDF$expChildren
-    simDF$wIQLoss <- simDF$totalIQLoss*simDF$propWhiteBlockPop
-    simDF$bIQLoss <- simDF$totalIQLoss*simDF$propBlackBlockPop
-    simDF$aIQLoss <- simDF$totalIQLoss*simDF$propAsianBlockPop
-    simDF$hIQLoss <- simDF$totalIQLoss*simDF$propHispanicBlockPop
+    simDF$bllIncrease <- simDF$leadConcentration*(bllIncreaseConstant-1)*
+      simDF$expChildrenUnfiltered
+    meanBllIncrease <- sum(simDF$bllIncrease)/sum(simDF$expChildrenUnfiltered)
     wExpChildPop <- sum(simDF$propWhiteBlockPop*simDF$expChildren)
     bExpChildPop <- sum(simDF$propBlackBlockPop*simDF$expChildren)
     aExpChildPop <- sum(simDF$propAsianBlockPop*simDF$expChildren)
     hExpChildPop <- sum(simDF$propHispanicBlockPop*simDF$expChildren)
-    meanWIQLoss <- sum(simDF$wIQLoss)/wExpChildPop
-    meanBIQLoss <- sum(simDF$bIQLoss)/bExpChildPop
-    meanAIQLoss <- sum(simDF$aIQLoss)/aExpChildPop
-    meanHIQLoss <- sum(simDF$hIQLoss)/hExpChildPop
-    iqLoss95 <- as.numeric(quantile(simDF$iqLoss,probs=.95))
     simChildPop <- sum(simDF$simBlockPop*simDF$simPunder6)
     wChildPop <- sum(simDF$propWhiteBlockPop*simDF$simBlockPop*simDF$simPunder6)
     bChildPop <- sum(simDF$propBlackBlockPop*simDF$simBlockPop*simDF$simPunder6)
     aChildPop <- sum(simDF$propAsianBlockPop*simDF$simBlockPop*simDF$simPunder6)
     hChildPop <- sum(simDF$propHispanicBlockPop*simDF$simBlockPop*simDF$simPunder6)
-    meanWIQLossTotalPop <- sum(simDF$wIQLoss)/wChildPop
-    meanBIQLossTotalPop <- sum(simDF$bIQLoss)/bChildPop
-    meanAIQLossTotalPop <- sum(simDF$aIQLoss)/aChildPop
-    meanHIQLossTotalPop <- sum(simDF$hIQLoss)/hChildPop
-    returnVec <- c(sum(simDF$expChildren),sum(simDF$totalIQLoss),
-                   meanWIQLoss,meanBIQLoss,
-                   meanAIQLoss,meanHIQLoss,
+    returnVec <- c(sum(simDF$expChildren),sum(simDF$expChildrenUnfiltered),
+                   meanBllIncrease,
                    wExpChildPop,bExpChildPop,
                    aExpChildPop,hExpChildPop,
                    simChildPop,wChildPop,
                    bChildPop,aChildPop,
-                   hChildPop,meanWIQLossTotalPop,
-                   meanBIQLossTotalPop,meanAIQLossTotalPop,
-                   meanHIQLossTotalPop,iqLoss95)
+                   hChildPop)
     simMat[i,] <- returnVec
     print(i)
   }
+  #fix colnames below to account for new and removed variables
   simMatDF <- as.data.frame(simMat)
   colnames(simMatDF) <- c("AffectedChildren_T","TotalIQLoss_T",
                           "MeanIQLoss_W","MeanIQLoss_B",
