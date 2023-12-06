@@ -146,100 +146,110 @@ simIQDensity <- function(simDF) {
   return(iqMat)
 }
 
-simFunc <- function(simDF,norm=T,meansVec=meansVec,adjustBLL=T,
+simFunc <- function(simDF,meansVec=meansVec,adjustBLL=T,
                     calib=T) {
-  #incorporate code to count unfiltered exposures
-  #incorporate code to only count relative BLL increase based on unfiltered exposure
-  simMat <- matrix(nrow=10000,ncol=20)
+  simMat <- matrix(nrow=10000,ncol=25)
   for(i in 1:10000)  {
-    coef1 <- runif(1,.38,.86)
-    coef2 <- runif(1,.12,.26)
-    coef3 <- runif(1,.07,.15)
     simDF_HCS <- simDF %>% select(CA,lower_Unfiltered,upper_Unfiltered) %>% distinct()
-    simDF_HCS$simFiltered <- runif(nrow(simDF_HCS),simDF_HCS$lower_Unfiltered,simDF_HCS$upper_Unfiltered)
-    simDF <- simDF %>% left_join(simDF_HCS %>% select(CA,simFiltered),by="CA")
-    
+    simDF_HCS$simFiltered <- runif(nrow(simDF_HCS),simDF_HCS$lower_Unfiltered,simDF_HCS$upper_Unfiltered)/100
+    simDF2 <- simDF %>% left_join(simDF_HCS %>% select(CA,simFiltered),by="CA")
     if(adjustBLL) {
       bllIncreaseConstant <- runif(1,exp(.09),exp(.33))
     } else {
       bllIncreaseConstant <- runif(1,exp(.18),exp(.42))
     }
-    simBGPopVec <- round(runif(nrow(simDF),simDF$totalPopulationBG-simDF$totalPopulation_MOE95,
-                               simDF$totalPopulationBG+simDF$totalPopulation_MOE95))
-    simPunder6Vec <- runif(nrow(simDF),simDF$pAllChildrenUnder6BG-simDF$pAllChildrenUnder6BG_MOE95,
-                           simDF$pAllChildrenUnder6BG+simDF$pAllChildrenUnder6BG_MOE95)
+    simBGPopVec <- round(runif(nrow(simDF2),simDF2$totalPopulationBG-simDF2$totalPopulation_MOE95,
+                               simDF2$totalPopulationBG+simDF2$totalPopulation_MOE95))
+    simPunder6Vec <- runif(nrow(simDF2),simDF2$pAllChildrenUnder6BG-simDF2$pAllChildrenUnder6BG_MOE95,
+                           simDF2$pAllChildrenUnder6BG+simDF2$pAllChildrenUnder6BG_MOE95)
     simPunder6Vec[simPunder6Vec<0] <- 0
     
-    simDF$simBGPop <- simBGPopVec
-    simDF$simPunder6 <- simPunder6Vec
-    simDF$simBlockPop = simDF$blockPopulation/simDF$totalPopulationBG*
-      simDF$simBGPop
+    simDF2$simBGPop <- simBGPopVec
+    simDF2$simPunder6 <- simPunder6Vec
+    simDF2$simBlockPop = simDF2$blockPopulation/simDF2$totalPopulationBG*
+      simDF2$simBGPop
     if(calib) {
-      simDF$simulatedTruth = rbinom(nrow(simDF),1,simDF$calibPreds)
+      simDF2$simulatedTruth = rbinom(nrow(simDF2),1,simDF2$calibPreds)
     } else{
-      simDF$simulatedTruth = rbinom(nrow(simDF),1,simDF$preds)
+      simDF2$simulatedTruth = rbinom(nrow(simDF2),1,simDF2$preds)
     }
     
-    simDF$expChildren <- simDF$simulatedTruth*simDF$simBlockPop*simDF$simPunder6
-    simDF$expChildrenUnfiltered <- simDF$expChildren*simDF$simFiltered
-    simDF$leadConcentration <- concentrationSampVec[,i]
-    simDF$bllIncrease <- simDF$leadConcentration*(bllIncreaseConstant-1)*
-      simDF$expChildrenUnfiltered
-    meanBllIncrease <- sum(simDF$bllIncrease)/sum(simDF$expChildrenUnfiltered)
-    wExpChildPop <- sum(simDF$propWhiteBlockPop*simDF$expChildren)
-    bExpChildPop <- sum(simDF$propBlackBlockPop*simDF$expChildren)
-    aExpChildPop <- sum(simDF$propAsianBlockPop*simDF$expChildren)
-    hExpChildPop <- sum(simDF$propHispanicBlockPop*simDF$expChildren)
-    simChildPop <- sum(simDF$simBlockPop*simDF$simPunder6)
-    wChildPop <- sum(simDF$propWhiteBlockPop*simDF$simBlockPop*simDF$simPunder6)
-    bChildPop <- sum(simDF$propBlackBlockPop*simDF$simBlockPop*simDF$simPunder6)
-    aChildPop <- sum(simDF$propAsianBlockPop*simDF$simBlockPop*simDF$simPunder6)
-    hChildPop <- sum(simDF$propHispanicBlockPop*simDF$simBlockPop*simDF$simPunder6)
-    returnVec <- c(sum(simDF$expChildren),sum(simDF$expChildrenUnfiltered),
-                   meanBllIncrease,
-                   wExpChildPop,bExpChildPop,
-                   aExpChildPop,hExpChildPop,
-                   simChildPop,wChildPop,
-                   bChildPop,aChildPop,
-                   hChildPop)
+    simDF2$expChildren <- simDF2$simulatedTruth*simDF2$simBlockPop*simDF2$simPunder6
+    simDF2$expChildrenUnfiltered <- simDF2$expChildren*simDF2$simFiltered
+    simDF2$leadConcentration <- concentrationSampVec[,i]
+    simDF2$bllIncrease <- simDF2$leadConcentration*(bllIncreaseConstant-1)*
+      simDF2$expChildrenUnfiltered
+    meanBllIncrease <- sum(simDF2$bllIncrease)/sum(simDF2$expChildrenUnfiltered)
+    meanBllIncreaseTotal <- sum(simDF2$bllIncrease)/sum(simDF2$simBlockPop*simDF2$simPunder6)
+    wExpChildPop <- sum(simDF2$propWhiteBlockPop*simDF2$expChildren)
+    bExpChildPop <- sum(simDF2$propBlackBlockPop*simDF2$expChildren)
+    aExpChildPop <- sum(simDF2$propAsianBlockPop*simDF2$expChildren)
+    hExpChildPop <- sum(simDF2$propHispanicBlockPop*simDF2$expChildren)
+    wExpChildPopUF <- sum(simDF2$propWhiteBlockPop*simDF2$expChildrenUnfiltered)
+    bExpChildPopUF <- sum(simDF2$propBlackBlockPop*simDF2$expChildrenUnfiltered)
+    aExpChildPopUF <- sum(simDF2$propAsianBlockPop*simDF2$expChildrenUnfiltered)
+    hExpChildPopUF <- sum(simDF2$propHispanicBlockPop*simDF2$expChildrenUnfiltered)
+    simChildPop <- sum(simDF2$simBlockPop*simDF2$simPunder6)
+    wChildPop <- sum(simDF2$propWhiteBlockPop*simDF2$simBlockPop*simDF2$simPunder6)
+    bChildPop <- sum(simDF2$propBlackBlockPop*simDF2$simBlockPop*simDF2$simPunder6)
+    aChildPop <- sum(simDF2$propAsianBlockPop*simDF2$simBlockPop*simDF2$simPunder6)
+    hChildPop <- sum(simDF2$propHispanicBlockPop*simDF2$simBlockPop*simDF2$simPunder6)
+    aBllIncrease <- sum(simDF2$bllIncrease*simDF2$propAsianBlockPop)/aExpChildPopUF
+    bBllIncrease <- sum(simDF2$bllIncrease*simDF2$propBlackBlockPop)/bExpChildPopUF
+    hBllIncrease <- sum(simDF2$bllIncrease*simDF2$propHispanicBlockPop)/hExpChildPopUF
+    wBllIncrease <- sum(simDF2$bllIncrease*simDF2$propWhiteBlockPop)/wExpChildPopUF
+    
+    aBllIncreaseTotal <- sum(simDF2$bllIncrease*simDF2$propAsianBlockPop)/aChildPop
+    bBllIncreaseTotal <- sum(simDF2$bllIncrease*simDF2$propBlackBlockPop)/bChildPop
+    hBllIncreaseTotal <- sum(simDF2$bllIncrease*simDF2$propHispanicBlockPop)/hChildPop
+    wBllIncreaseTotal <- sum(simDF2$bllIncrease*simDF2$propWhiteBlockPop)/wChildPop
+    
+    returnVec <- c(sum(simDF2$expChildren),sum(simDF2$expChildrenUnfiltered),
+                   meanBllIncrease,meanBllIncreaseTotal,
+                   aBllIncrease,bBllIncrease,
+                   hBllIncrease,wBllIncrease,
+                   aBllIncreaseTotal,bBllIncreaseTotal,
+                   hBllIncreaseTotal,wBllIncreaseTotal,
+                   aExpChildPop,bExpChildPop,
+                   hExpChildPop,wExpChildPop,
+                   aExpChildPopUF,bExpChildPopUF,
+                   hExpChildPopUF,wExpChildPopUF,
+                   simChildPop,aChildPop,
+                   bChildPop,hChildPop,
+                   wChildPop)
     simMat[i,] <- returnVec
     print(i)
   }
-  #fix colnames below to account for new and removed variables
   simMatDF <- as.data.frame(simMat)
-  colnames(simMatDF) <- c("AffectedChildren_T","TotalIQLoss_T",
-                          "MeanIQLoss_W","MeanIQLoss_B",
-                          "MeanIQLoss_A","MeanIQLoss_H",
-                          "AffectedChildren_W","AffectedChildren_B",
-                          "AffectedChildren_A","AffectedChildren_H",
-                          "ChildPopulation_T","ChildPopulation_W",
-                          "ChildPopulation_B","ChildPopulation_A",
-                          "ChildPopulation_H","MeanIQLossTotalPop_W",
-                          "MeanIQLossTotalPop_B","MeanIQLossTotalPop_A",
-                          "MeanIQLossTotalPop_H","iqLoss95_T")
+  colnames(simMatDF) <- c("AffectedChildren_T","AffectedChildrenUF_T",
+                          "MeanBLLIncreaseAffected_T","MeanBLLIncreaseOverall_T",
+                          "MeanBLLIncreaseAffected_A","MeanBLLIncreaseAffected_B",
+                          "MeanBLLIncreaseAffected_H","MeanBLLIncreaseAffected_W",
+                          "MeanBLLIncreaseOverall_A","MeanBLLIncreaseOverall_B",
+                          "MeanBLLIncreaseOverall_H","MeanBLLIncreaseOverall_W",
+                          "AffectedChildren_A","AffectedChildren_B",
+                          "AffectedChildren_H","AffectedChildren_W",
+                          "AffectedChildrenUF_A","AffectedChildrenUF_B",
+                          "AffectedChildrenUF_H","AffectedChildrenUF_W",
+                          "ChildPopulation_T","ChildPopulation_A",
+                          "ChildPopulation_B","ChildPopulation_H",
+                          "ChildPopulation_W")
   return(simMatDF)
 }
 
-
 generateSimTable <- function(vec) {
   tableDF <- as.data.frame(t(vec))
-  tableDF$TotalIQLoss_A <- tableDF$MeanIQLoss_A*tableDF$AffectedChildren_A
-  tableDF$TotalIQLoss_B <- tableDF$MeanIQLoss_B*tableDF$AffectedChildren_B
-  tableDF$TotalIQLoss_H <- tableDF$MeanIQLoss_H*tableDF$AffectedChildren_H
-  tableDF$TotalIQLoss_W <- tableDF$MeanIQLoss_W*tableDF$AffectedChildren_W
-  tableDF$MeanIQLoss_T <- tableDF$TotalIQLoss_T/tableDF$AffectedChildren_T
   tableDF <- tableDF %>%
     pivot_longer(cols = everything()) %>%
-    separate_wider_delim(name,delim="_",names=c("var","racial_group")) %>% 
+    separate_wider_delim(name,delim="_",names=c("var","racial_group"
+                                                )) %>% 
     pivot_wider(names_from = racial_group, values_from = value)
-  tableDF[5,2] <- tableDF[2,2]/tableDF[4,2] #calculate mean for total population
+  
   tableDF[2:6] <- signif(tableDF[2:6],3) #round significant figures
-  tableDF2 <- tableDF[,c(1,2,5,4,6,3)] #reorder columns in alphabetical order
-  return(tableDF2)
+  return(tableDF)
 }
 
 generateSimAggTable <- function(sDF) {
-  sDF$iqLoss95_T <- NULL
   medians <- apply(sDF,2,median)
   lower05 <- apply(sDF,2,quantile,probs=0.05)
   upper95 <- apply(sDF,2,quantile,probs=0.95)
@@ -258,8 +268,7 @@ generateSimAggTable <- function(sDF) {
   combined_df$X1 <- simTableDF$var
   colnames(combined_df) <- colnames(simTableDF)
   simAggTable <- as.data.frame(t(combined_df)) %>% rownames_to_column()
-  simAggTable2 <- simAggTable[, c(1, 5, 2, 3,4,6)] #fix column orders
-  return(simAggTable2)
+  return(simAggTable)
 }
 
 fitSplit <- function(dataSplit,testData,gridNum=5) {
