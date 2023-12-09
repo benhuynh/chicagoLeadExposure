@@ -173,6 +173,13 @@ simFunc <- function(simDF,meansVec=meansVec,adjustBLL=T,
     } else{
       simDF2$simulatedTruth = rbinom(nrow(simDF2),1,simDF2$preds)
     }
+    simDF2$falsePos = rbinom(nrow(simDF2),1,false_discovery_rate)
+    simDF2$falseNeg = rbinom(nrow(simDF2),1,false_omission_rate)
+    simDF2 <- simDF2 %>% mutate(
+      adjustedTruth = ifelse(simulatedTruth==1,simulatedTruth*(1-falsePos),
+                             simulatedTruth+falseNeg)
+    )
+    simDF2$simulatedTruth <- simDF2$adjustedTruth
     
     simDF2$expChildren <- simDF2$simulatedTruth*simDF2$simBlockPop*simDF2$simPunder6
     simDF2$expChildrenUnfiltered <- simDF2$expChildren*simDF2$simFiltered
