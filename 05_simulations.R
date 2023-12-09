@@ -96,6 +96,18 @@ meansVec <- ifelse(is.na(meansVec),min(meansVec,na.rm=T)/2,meansVec)
 simDF2$totalPopulation_MOE95 <- simDF2$totalPopulation_MOE/qnorm(.95)*qnorm(.975)
 simDF2$pAllChildrenUnder6BG_MOE95 <- simDF2$pAllChildrenUnder6BG_MOE/qnorm(.95)*qnorm(.975)
 
+
+#propagate uncertainty from ML predictions
+cmDF <- simDF %>% filter(!is.na(overOne_2))
+cmDF$predClass <- factor(cmDF$predClass)
+cmDF$overOne_2 <- factor(cmDF$overOne_2)
+
+cm <- conf_mat(cmDF,truth=overOne_2,estimate=predClass)
+false_discovery_rate <- cm$table[2,1]/(cm$table[2,2]+cm$table[2,1]) #same as 1-PPV
+false_omission_rate <- cm$table[1,2]/(cm$table[1,1]+cm$table[1,2]) #same as 1-NPV
+
+
+
 simMatDF <- simFunc(simDF=simDF2,meansVec=meansVec)
 write_csv(simMatDF,paste0("data/processed/simResults_",now(),".csv"))
 simMatDF_bll_unadj <- simFunc(simDF=simDF2,meansVec=meansVec,adjustBLL=F)
