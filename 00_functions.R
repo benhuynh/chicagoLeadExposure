@@ -145,6 +145,46 @@ simIQDensity <- function(simDF) {
   }
   return(iqMat)
 }
+races <- c("Asian","Black","Hispanic","White")
+
+simulateRacesForBlock <- function(row) {
+    # Probabilities for each race
+    race_probs <- row[1:4]#c(row$propAsianBlockPop, row$propBlackBlockPop, 
+                  #  row$propHispanicBlockPop, row$propWhiteBlockPop)
+    # Simulate races
+    if(sum(race_probs>0)) {
+      sampVec <- sample(races, size = 1, replace = TRUE, prob = race_probs)  
+    }
+    else {
+      race_probsBG <- row[5:8]#c(row$asianPropBG, row$blackPropBG, 
+                      #  row$hispanicPropBG, row$whitePropBG)
+      sampVec <- sample(races, size = 1, replace = TRUE, prob = race_probsBG)
+    }
+    return(sampVec)
+}
+getRaceEstimates <- function(blocksDF) {
+  #given a dataset (e.g., tested population, untested population), provide estimate of racial breakdown
+  blocksDF <- blocksDF %>% select(propAsianBlockPop,propBlackBlockPop,
+                                  propHispanicBlockPop,propWhiteBlockPop,
+                                  asianPropBG, blackPropBG, 
+                                  hispanicPropBG, whitePropBG) %>% as.matrix()
+  returnMat <- matrix(nrow=1000,ncol=4)
+  for(i in 1:1000) {
+    simulated_races <- apply(blocksDF, 1, simulateRacesForBlock)
+    returnMat[i,] <- table(simulated_races)/sum(table(simulated_races))
+    print(i)
+  }
+  return(returnMat)
+}
+
+getRaceEstimatesUI <- function(rMat) {
+  medians <- signif(apply(rMat,2,median),3)
+  lower05 <- signif(apply(rMat,2,quantile,probs=0.05),3)
+  upper95 <- signif(apply(rMat,2,quantile,probs=0.95),3)
+  return(paste0(medians," [",lower05,"-",upper95,"]"))
+}
+
+
 
 simFunc <- function(simDF,meansVec=meansVec,adjustBLL=T,
                     calib=T) {

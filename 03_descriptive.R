@@ -5,6 +5,7 @@ library(ggplot2)
 imputeDF <- read_csv("data/processed/imputeDF.csv")
 imputeDF$month <- month(as.Date(imputeDF$`Date Sampled`))
 testedDF <- imputeDF %>% filter(tested)
+untestedDF <- imputeDF %>% filter(!tested)
 plot(density(testedDF$month))
 
 plotDF <- testedDF %>% group_by(month) %>%
@@ -38,7 +39,8 @@ sum(testedDF$`5 Minute` >= 15)/nrow(testedDF)
 
 
 
+#tests representativeness of data
 
-
-
+untestedDemographics <- getRaceEstimates(untestedDF)
+testedDemographics <- getRaceEstimates(testedDF)
   
