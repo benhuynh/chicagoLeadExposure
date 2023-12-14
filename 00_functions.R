@@ -168,8 +168,8 @@ getRaceEstimates <- function(blocksDF) {
                                   propHispanicBlockPop,propWhiteBlockPop,
                                   asianPropBG, blackPropBG, 
                                   hispanicPropBG, whitePropBG) %>% as.matrix()
-  returnMat <- matrix(nrow=1000,ncol=4)
-  for(i in 1:1000) {
+  returnMat <- matrix(nrow=10000,ncol=4)
+  for(i in 1:10000) {
     simulated_races <- apply(blocksDF, 1, simulateRacesForBlock)
     returnMat[i,] <- table(simulated_races)/sum(table(simulated_races))
     print(i)
@@ -318,7 +318,7 @@ generateSimAggTable <- function(sDF) {
   return(simAggTable)
 }
 
-fitSplit <- function(dataSplit,testData,gridNum=5) {
+fitSplit <- function(dataSplit,testData,gridNum=5,propensity=F) {
   #returns original preds and calibrated preds for a given data split
   #lightgbm specification
   tune_spec_calib2 <- boost_tree(
@@ -327,9 +327,16 @@ fitSplit <- function(dataSplit,testData,gridNum=5) {
     tree_depth = tune()) %>% 
     set_mode("classification") %>% 
     set_engine("lightgbm")
+  if(propensity) {
+    tune_wf_calib2 <- workflow() %>%
+      add_formula(tested ~ .-blockNum-overOne_2) %>%  
+      add_model(tune_spec_calib2)
+  }
+  else {
     tune_wf_calib2 <- workflow() %>%
       add_formula(overOne_2 ~ .-blockNum) %>%  
       add_model(tune_spec_calib2)
+  }
   trees_folds_dataSplit <- group_vfold_cv(dataSplit,group=blockNum,v=3)
   doParallel::registerDoParallel()
   set.seed(127)
@@ -349,7 +356,11 @@ fitSplit <- function(dataSplit,testData,gridNum=5) {
                                       parameters=best_tree_dataSplit)
   fit_split <- final_wf_dataSplit %>%
     fit(dataSplit)
-  cell_cal <- cal_estimate_beta(bestFitPreds,truth=overOne_2)
+  if(propensity) {
+    cell_cal <- cal_estimate_beta(bestFitPreds,truth=tested)
+  } else {
+    cell_cal <- cal_estimate_beta(bestFitPreds,truth=overOne_2)
+  }  
   test_pred <- augment(fit_split, new_data = testData)
   cal_pred <-
     test_pred %>%

@@ -106,6 +106,15 @@ cm <- conf_mat(cmDF,truth=overOne_2,estimate=predClass)
 false_discovery_rate <- cm$table[2,1]/(cm$table[2,2]+cm$table[2,1]) #same as 1-PPV
 false_omission_rate <- cm$table[1,2]/(cm$table[1,1]+cm$table[1,2]) #same as 1-NPV
 
+#% of blocks predicted as having lead > 1 ppb
+nrow(simDF %>% filter(predClass))/nrow(simDF)
+
+#corrected for FDR and FOR
+falseNegatives <- simDF %>% filter(!predClass) %>% nrow() * false_omission_rate
+falsePositives <- simDF %>% filter(predClass) %>% nrow() * false_discovery_rate
+
+(simDF %>% filter(predClass) %>% nrow() + falseNegatives-falsePositives)/nrow(simDF)
+#need to run this on untested data
 
 
 simMatDF <- simFunc(simDF=simDF2,meansVec=meansVec)
