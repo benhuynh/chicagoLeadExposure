@@ -47,6 +47,8 @@ simDF <- simDF %>% left_join(tractsToCA,by=c("censusTract"="GEOID20")) %>%
 simDF$calibPreds <- 1-simDF$calibPreds #originally predicting FALSE, switch signs
 simDF$preds <- 1-simDF$preds
 simDF$predClass <- simDF$preds>=.5
+write_csv(simDF,"data/processed/simDF.csv")
+
 
 concDF <- read_csv("data/processed/imputeDF.csv") %>% filter(tested) #switch with leDF?
 concDF2 <- concDF %>% select(blockGroup,censusTract,CA,blockNum,`1st Draw`,
@@ -96,7 +98,6 @@ meansVec <- ifelse(is.na(meansVec),min(meansVec,na.rm=T)/2,meansVec)
 simDF2$totalPopulation_MOE95 <- simDF2$totalPopulation_MOE/qnorm(.95)*qnorm(.975)
 simDF2$pAllChildrenUnder6BG_MOE95 <- simDF2$pAllChildrenUnder6BG_MOE/qnorm(.95)*qnorm(.975)
 
-
 #propagate uncertainty from ML predictions
 cmDF <- simDF %>% filter(!is.na(overOne_2))
 cmDF$predClass <- factor(cmDF$predClass)
@@ -106,15 +107,42 @@ cm <- conf_mat(cmDF,truth=overOne_2,estimate=predClass)
 false_discovery_rate <- cm$table[2,1]/(cm$table[2,2]+cm$table[2,1]) #same as 1-PPV
 false_omission_rate <- cm$table[1,2]/(cm$table[1,1]+cm$table[1,2]) #same as 1-NPV
 
-#% of blocks predicted as having lead > 1 ppb
-nrow(simDF %>% filter(predClass))/nrow(simDF)
+riskMatchDF <- read_csv("data/processed/riskMatchDF.csv")
+
+riskMatchDF$overOne_2 <- factor(riskMatchDF$overOne_2)
+riskMatchDF$predClass <- factor(ifelse(1-riskMatchDF$calibPreds>=.5,TRUE,FALSE))
+cmAdj <- conf_mat(riskMatchDF,truth=overOne_2,estimate=predClass)
+false_discovery_rateAdj <- cmAdj$table[2,1]/(cmAdj$table[2,2]+cmAdj$table[2,1]) #same as 1-PPV
+false_omission_rateAdj <- cmAdj$table[1,2]/(cmAdj$table[1,1]+cmAdj$table[1,2]) #same as 1-NPV
 
 #corrected for FDR and FOR
-falseNegatives <- simDF %>% filter(!predClass) %>% nrow() * false_omission_rate
-falsePositives <- simDF %>% filter(predClass) %>% nrow() * false_discovery_rate
+falseNegatives <- simDF %>% 
+  filter(!predClass) %>% nrow() * false_omission_rate
+falsePositives <- simDF %>% 
+  filter(predClass) %>% nrow() * false_discovery_rate
 
-(simDF %>% filter(predClass) %>% nrow() + falseNegatives-falsePositives)/nrow(simDF)
-#need to run this on untested data
+falseNegativesAdj <- simDF %>% filter(!tested) %>% 
+  filter(!predClass) %>% nrow() * false_omission_rateAdj +
+  simDF %>% filter(tested) %>% 
+  filter(!predClass) %>% nrow() * false_omission_rate
+falsePositivesAdj <- simDF %>% filter(!tested) %>% 
+  filter(predClass) %>% nrow() * false_discovery_rateAdj +
+  simDF %>% filter(tested) %>% 
+  filter(predClass) %>% nrow() * false_discovery_rate
+
+#% of blocks predicted as having lead > 1 ppb
+nrow(simDF %>% filter(predClass))/nrow(simDF)
+#% of tests that have lead >1 ppb
+(imputeDF %>% filter(tested,overOne_2==TRUE) %>% nrow())/
+  (imputeDF %>% filter(tested) %>% nrow())
+#number of blocks predicted as positive adjusted for training-set FDR and FOR
+(simDF %>% filter(predClass) %>% nrow() + falseNegatives-
+    falsePositives)/nrow(simDF)
+#number of blocks predicted as positive adjusted for FDR and FOR, split by tested/untested distributions
+(simDF %>% filter(predClass) %>% nrow() + falseNegativesAdj-
+    falsePositivesAdj)/nrow(simDF)
+
+
 
 
 simMatDF <- simFunc(simDF=simDF2,meansVec=meansVec)
@@ -136,4 +164,19 @@ write_csv(simAggTable2,paste0("data/processed/simAggTable_",now(),".csv"))
 write_csv(simAggTable_uni,paste0("data/processed/simAggTable_uni_",now(),".csv"))
 write_csv(simAggTable_bll_unadj,paste0("data/processed/simAggTable_bll_unadj_",now(),".csv"))
 write_csv(simAggTable_uncalib,paste0("data/processed/simAggTable_uncalib_",now(),".csv"))
+
+
+#calculate block-level outcomes
+testedDFC <- testedDF %>% 
+  group_by(blockNum) %>% 
+  mutate(outcomeCheck = mean(overOne_2), 
+         outcheck = ifelse((outcomeCheck != 0 & outcomeCheck != 1),TRUE,FALSE),
+         blockOutcome = ifelse(outcomeCheck >= .5,TRUE,FALSE)) %>% ungroup()
+testedDFC2 <- testedDFC %>% distinct(blockNum,.keep_all=T)
+table(testedDFC2$blockOutcome)
+testedDFC$overOne_2 <- factor(testedDFC$overOne_2)
+testedDFC$blockOutcome <- factor(testedDFC$blockOutcome)
+
+cmDFC <- conf_mat(testedDFC,truth=overOne_2,estimate=blockOutcome)
+roc_auc(testedDFC,truth=overOne_2,estimate=outcomeCheck)
 

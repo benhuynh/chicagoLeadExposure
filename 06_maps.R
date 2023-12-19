@@ -128,10 +128,10 @@ estimatedRiskPlot <- ggplot() + geom_sf(data=tractMapDF3, aes(fill=medPred)) +
   ggthemes::theme_map() + ggtitle("Estimated risk") +
   theme(plot.title = element_text(size = 8, hjust= 0.5))
 
-numPredictedLead <- riskMapDF %>% filter(preds<=0.5) %>% nrow()
-print(paste0(round(numPredictedLead/nrow(riskMapDF)*100,2),"% of observations are predicted to have lead service lines."))
-numRawLead <- leadExposure %>% filter(`2-3 Minute` >= 1) %>% nrow()
-print(paste0(round(numRawLead/nrow(leadExposure)*100,2),"% of raw observations have lead service lines."))
+# numPredictedLead <- riskMapDF %>% filter(calibPreds<=0.5) %>% nrow()
+# print(paste0(round(numPredictedLead/nrow(riskMapDF)*100,2),"% of blocks are predicted to have lead service lines."))
+# numRawLead <- leadExposure %>% filter(`2-3 Minute` >= 1) %>% nrow()
+# print(paste0(round(numRawLead/nrow(leadExposure)*100,2),"% of raw observations have lead service lines."))
 
 propensitiesDF <- read_csv("data/processed/imputeDF.csv")
 missingDF <- propensitiesDF %>% select(blockNum,censusTract,tested,pctW) %>% 
@@ -161,25 +161,34 @@ pctPOCPlot <- ggplot() + geom_sf(data=tractMapDF5, aes(fill=1-pctW)) +
   ggthemes::theme_map()+ ggtitle("Racially minoritized") +
   theme(plot.title = element_text(size = 8, hjust = 0.5))
 
+caFilterPlot <- readRDS("data/processed/caFilterPlot.rds")
+
 library(cowplot)
+# Create an empty plot
+empty_plot <- ggplot() + 
+  theme_void() + 
+  theme(plot.background = element_blank())
+
 prow <- plot_grid(rawLeadPrevalencePlot + theme(legend.position="none"),
           estimatedRiskPlot + theme(legend.position="none"),
+          #caFilterPlot + theme(legend.position="none",plot.title = element_text(size = 8, hjust = 0.5)),
           testingRatesPlot + theme(legend.position="none"),
           pctPOCPlot + theme(legend.position="none"),
-          labels = c("A", "B", "C","D"),label_size=7,vjust=1.75,hjust=-1)
+          labels = c("A", "B", "C","D", "E"),label_size=7,vjust=1.75,hjust=-1)
 
 legend <- get_legend(
   # create some space to the left of the legend
   rawLeadPrevalencePlot + guides(color = guide_legend(nrow = 1)) +
     theme(legend.position = "bottom") + labs(fill="text")
 )
-legendRow <- plot_grid(NULL, legend, NULL, nrow = 1)#, rel_widths = c(0.5, 1, 0.5))
+legendRow <- plot_grid(NULL, legend,NULL, nrow = 1)#, rel_widths = c(0.5, 1, 0.5))
 mapPlot <- plot_grid(prow, legendRow, rel_heights = c(3, .2),nrow=2)
 
 library(tmaptools)
 plot_ratio <- get_asp_ratio(tractMapDF5)
 ggsave('figs/p2_perfect2.png', plot=mapPlot, width = plot_ratio*5, height=5)
 ggsave('figs/p2_perfect2.pdf', plot=mapPlot, width = plot_ratio*5, height=5)
+
 
 
 ##shap maps

@@ -41,12 +41,17 @@ caNum$CA <- factor(caNum$CA)
 caNum2 <- caNum %>% left_join(nc,by=c("CA"="AREA_NUM_1"))
 
 caFilterPlot <- ggplot() + 
-  geom_sf(data=caNum, aes(fill=percent_Unfiltered,
+  geom_sf(data=caNum2, aes(fill=percent_Unfiltered,
                           geometry=geometry)) +
   scale_fill_distiller(type="seq",palette=9,direction=1,
-                       name="% Unfiltered tap water usage",
+                       name="% Usage",
                        
   ) + 
   ggthemes::theme_map() + ggtitle("Unfiltered tap water usage")
-  
-  
+
+saveRDS(caFilterPlot,file="data/processed/caFilterPlot.rds")
+
+plot_ratioFP <- get_asp_ratio(caFilterPlot)
+ggsave('figs/caFilterPlot.png', plot=caFilterPlot, width = plot_ratio*5, height=5)
+ggsave('figs/caFilterPlot.pdf', plot=caFilterPlot, width = plot_ratio*5, height=5)
+

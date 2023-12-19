@@ -147,15 +147,15 @@ propensity_test <- imputeDF %>% filter(tested==F) %>%
 
 
 withoutTestsPreds <- fitSplit(dataSplit = propensity_train,
-                              testData=propensity_test,gridNum=5)
+                              testData=propensity_test,gridNum=10)
 
 
 withoutTests <- withoutTestsPreds %>% 
   rename(preds = rawPreds) %>% 
-  select(blockNum,preds,calibPreds)
+  select(blockNum,preds,calibPreds,overOne_2)
 withTests <- riskDF %>% 
   rename(preds = rawPreds) %>% 
-  select(blockNum,preds,calibPreds)
+  select(blockNum,preds,calibPreds,overOne_2)
 riskDF2 <- rbind(withTests,withoutTests)
 write_csv(riskDF2,"data/processed/riskDF.csv")
 
@@ -174,3 +174,21 @@ library(shapviz)
 outcomeShap <- shapviz(myModel2, X_pred = baked2, x=trainDF2)
 saveRDS(outcomeShap,file="data/processed/outcomeShap.rds")
 write_csv(trainDF2,"data/processed/trainDF2.csv")
+
+
+#baseline ML predictions
+baselineTrainDF2 <- trainDF2 %>% group_by(blockGroup) %>% 
+  mutate(bgMean = mean(as.numeric(overOne_2)),
+         bgMean = ifelse(bgMean >=0.5,TRUE,FALSE)) %>% 
+  ungroup() %>% 
+  group_by(censusTract) %>% 
+  mutate(tractMean = mean(as.numeric(overOne_2)),
+         tractMean = ifelse(tractMean >=0.5,TRUE,FALSE)) %>% 
+  ungroup() %>% 
+  group_by(CA) %>% 
+  mutate(caMean = mean(as.numeric(overOne_2)),
+         caMean = ifelse(caMean >=0.5,TRUE,FALSE))
+  
+baselineTrainDF3 <- baselineTrainDF2 %>% select(blockGroup,censusTract,CA,
+                                                bgMean,tractMean,caMean)
+

@@ -27,7 +27,7 @@ imputeDF2 <- imputeDF %>% select(blockPopulation,
                                              educationDoctoratePropBG,blockGroup,
                                              censusTract,blockNum,tested,overOne_2) %>% 
   distinct(blockNum,.keep_all=T)
-riskDF <- riskDF %>% distinct()  
+riskDF <- riskDF %>% select(-overOne_2) %>% distinct()
 riskDF$blockNum <- as.character(riskDF$blockNum)
 imputeDF2$blockNum <- as.character(imputeDF2$blockNum)
 rarDF <- imputeDF2 %>% left_join(riskDF,by=c("blockNum"="blockNum"))
@@ -40,12 +40,16 @@ rarB <- glm(tested~propBlackBlockPop+preds+blockPopulation,data=rarDF,family="bi
 rarA <- glm(tested~propAsianBlockPop+preds+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
 rarH <- glm(tested~propHispanicBlockPop+preds+blockPopulation,data=rarDF,family="binomial") %>% summary()
+#test regressions
 
-rarEduM <- glm(tested~educationMastersPropBG+preds+blockPopulation,data=rarDF,family="binomial") %>% summary()
+rrW <- glm(tested~propWhiteBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
-rarEduB <-glm(tested~educationBachelorsPropBG+preds+blockPopulation,data=rarDF,family="binomial") %>% summary()
+rrB <- glm(tested~propBlackBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
-rarEduHS <-glm(tested~educationHSPropBG+preds+blockPopulation,data=rarDF,family="binomial") %>% summary()
+rrA <- glm(tested~propAsianBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
+
+rrH <- glm(tested~propHispanicBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
+
 
 #outcome regressions
 outcomeW <- glm(overOne_2~propWhiteBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
@@ -55,12 +59,6 @@ outcomeB <- glm(overOne_2~propBlackBlockPop+blockPopulation,data=rarDF,family="b
 outcomeA <- glm(overOne_2~propAsianBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
 outcomeH <- glm(overOne_2~propHispanicBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
-
-outcomeEduM <- glm(overOne_2~educationMastersPropBG+blockPopulation,data=rarDF,family="binomial") %>% summary()
-
-outcomeEduB <- glm(overOne_2~educationBachelorsPropBG+blockPopulation,data=rarDF,family="binomial") %>% summary()
-
-outcomeEduHS <- glm(overOne_2~educationHSPropBG+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
 getGLMResults <- function(mod) {
   c <- mod$coefficients[2]
