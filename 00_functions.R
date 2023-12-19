@@ -162,28 +162,36 @@ simulateRacesForBlock <- function(row) {
     }
     return(sampVec)
 }
-getRaceEstimates <- function(blocksDF) {
-  #given a dataset (e.g., tested population, untested population), provide estimate of racial breakdown
-  blocksDF <- blocksDF %>% select(propAsianBlockPop,propBlackBlockPop,
-                                  propHispanicBlockPop,propWhiteBlockPop,
-                                  asianPropBG, blackPropBG, 
-                                  hispanicPropBG, whitePropBG) %>% as.matrix()
-  returnMat <- matrix(nrow=10000,ncol=4)
-  for(i in 1:10000) {
-    simulated_races <- apply(blocksDF, 1, simulateRacesForBlock)
-    returnMat[i,] <- table(simulated_races)/sum(table(simulated_races))
-    print(i)
+getRaceEstimates <- function(dataset,tested=T) {
+  # Calculate the total number of observations for each race and round to no decimal points
+  if(tested) {
+    blockWeight = 1
+    numObservations = nrow(dataset)
+  } else {
+    blockWeight = dataset$blockPopulation
+    numObservations = sum(dataset$blockPopulation)
   }
-  return(returnMat)
+  totalAsian = round(sum(dataset$propAsianBlockPop*blockWeight))
+  totalBlack = round(sum(dataset$propBlackBlockPop*blockWeight))
+  totalHispanic = round(sum(dataset$propHispanicBlockPop*blockWeight))
+  totalWhite = round(sum(dataset$propWhiteBlockPop*blockWeight))
+  
+  # Calculate the proportion of the dataset for each race and convert to percentage
+  proportionAsian = round((totalAsian / numObservations) * 100, 1)
+  proportionBlack = round((totalBlack / numObservations) * 100, 1)
+  proportionHispanic = round((totalHispanic / numObservations) * 100, 1)
+  proportionWhite = round((totalWhite / numObservations) * 100, 1)
+  
+  # Create a list to return the results, with percentages in parentheses
+  results <- list(
+    Asian = paste(totalAsian, "(", proportionAsian, "%)", sep=""),
+    Black = paste(totalBlack, "(", proportionBlack, "%)", sep=""),
+    Hispanic = paste(totalHispanic, "(", proportionHispanic, "%)", sep=""),
+    White = paste(totalWhite, "(", proportionWhite, "%)", sep="")
+  )
+  
+  return(results)
 }
-
-getRaceEstimatesUI <- function(rMat) {
-  medians <- signif(apply(rMat,2,median),3)
-  lower05 <- signif(apply(rMat,2,quantile,probs=0.05),3)
-  upper95 <- signif(apply(rMat,2,quantile,probs=0.95),3)
-  return(paste0(medians," [",lower05,"-",upper95,"]"))
-}
-
 
 
 simFunc <- function(simDF,meansVec=meansVec,adjustBLL=T,
@@ -329,7 +337,7 @@ fitSplit <- function(dataSplit,testData,gridNum=5,propensity=F) {
     set_engine("lightgbm")
   if(propensity) {
     tune_wf_calib2 <- workflow() %>%
-      add_formula(tested ~ .-blockNum-overOne_2) %>%  
+      add_formula(tested ~ .-blockNum) %>%  
       add_model(tune_spec_calib2)
   }
   else {

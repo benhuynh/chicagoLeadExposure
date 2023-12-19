@@ -15,7 +15,7 @@ propensityDF <- imputeDF %>%
          blockNum = factor(blockNum),
          blockGroup = factor(blockGroup),
          tested = factor(tested)
-  )
+  ) %>% distinct(blockNum,.keep_all=T)
 
 split_df <- group_initial_split(propensityDF,group=blockNum) #keep blocks in same split
 trainDF <- training(split_df)
@@ -24,7 +24,6 @@ tree_rec <- recipe(tested ~ ., data = propensityDF) %>%
   update_role(blockNum, new_role="ID")
 
 
-m.out <- matchit(tested ~ blockGroup+censusTract+CA, data = propensityDF, method = "nearest")
 
 
 # Identify categorical variables
@@ -69,33 +68,33 @@ tune_res %>%
 
 
 ##retune using 5-fold + more exhaustive grid search
-tune_res_final2 <- tune_grid(
-  tune_wf2,
+tune_res_final <- tune_grid(
+  tune_wf,
   resamples = trees_folds3,
   grid = 15
 )
-tune_res_final2 %>%
+tune_res_final %>%
   tune::show_best(metric = "roc_auc",n = 5)
 
-best_tree2 <- tune_res_final2 %>%
+best_tree <- tune_res_final %>%
   select_best("roc_auc")
 
 
-final_wf2 <- 
-  tune_wf2 %>% 
-  finalize_workflow(best_tree2)
-saveRDS(final_wf2,"data/processed/outcomeWF.rds")
+final_wf <- 
+  tune_wf %>% 
+  finalize_workflow(best_tree)
+saveRDS(final_wf,"data/processed/propensityWF.rds")
 
-final_fit2 <- 
-  final_wf2 %>%
-  last_fit(split_df2)
+final_fit <- 
+  final_wf %>%
+  last_fit(split_df)
 
 
-final_fit2 %>% 
+final_fit %>% 
   collect_metrics()
 
-myModel2 <- extract_fit_engine(final_fit2)
-impObj2 <- lgb.importance(myModel2,percentage = F)
+# myModel2 <- extract_fit_engine(final_fit2)
+# impObj2 <- lgb.importance(myModel2,percentage = F)
 
 
 #make calibrated risk predictions
@@ -103,56 +102,36 @@ predSplits <- group_initial_split(propensityDF,group=blockNum,prop=1/2)
 split1 <- training(predSplits)
 split2 <- testing(predSplits)
 
-splitDF1 <- fitSplit(dataSplit = split1, testData=split2,gridNum=10)
-splitDF2 <- fitSplit(dataSplit = split2, testData=split1,gridNum=10)
+splitDF1 <- fitSplit(dataSplit = split1, testData=split2,gridNum=10,propensity=T)
+splitDF2 <- fitSplit(dataSplit = split2, testData=split1,gridNum=10,propensity=T)
 
-riskDF <- rbind(splitDF1,splitDF2)
+propensityPredsDF <- rbind(splitDF1,splitDF2)
 
-write_csv(riskDF,"data/processed/riskDF_pt1.csv")
-
-#make outcome predictions on blocks without tests
-imputeDF <- read_csv("data/processed/imputeDF.csv")
-imputeDF <- imputeDF %>%
-  select(-`1st Draw`,-`2-3 Minute`,-`5 Minute`,
-         -HHsInternetPropBG,-pCompletePlumbingFacilitiesBG,
-         -HHsHasComputerPropBG,-pOccupiedHousesBG,-sequential,
-         -pRenterOccupiedHousesBG) %>%  #remove redundant features
-  mutate(overOne_2 = factor(overOne_2),
-         censusTract = factor(censusTract),
-         CA = factor(CA),
-         blockNum = factor(blockNum),
-         blockGroup = factor(blockGroup))
-propensity_train <- imputeDF %>% filter(tested==T) %>% 
-  select(-tested)
-propensity_test <- imputeDF %>% filter(tested==F) %>% 
-  select(-tested)
+write_csv(propensityPredsDF,"data/processed/propensityPredsDF.csv")
 
 
-withoutTestsPreds <- fitSplit(dataSplit = propensity_train,
-                              testData=propensity_test,gridNum=5)
+m.out <- matchit(tested ~ .pred_TRUE, data = propensityPredsDF, method = "nearest")
+data.matched <- match.data(m.out)
+matchedTestedDF <- data.matched %>% filter(tested==T)
+
+m.out2 <- matchit(1-as.logical(tested)~whitePropBG+blackPropBG+asianPropBG+hispanicPropBG+
+                    educationHSPropBG+educationBachelorsPropBG+nBlocks+pOld,
+                  data=propensityDF,method="nearest",calipter=.15,replace = T)
+data.matched2 <- match.data(m.out2)
+plot(m.out2, type = "jitter", interactive = FALSE)
+matchedTestedDF2 <- data.matched2 %>% filter(tested==T)
+
+riskDF2 <- read_csv("data/processed/riskDF.csv")
+
+riskMatchDF <- riskDF2 %>% 
+  mutate(blockNum=factor(blockNum)) %>% 
+  filter(blockNum %in% matchedTestedDF2$blockNum)
+write_csv(riskMatchDF,"data/processed/riskMatchDF.csv")
+
+riskMatchDF$overOne_2 <- factor(riskMatchDF$overOne_2)
+riskMatchDF$predClass <- factor(ifelse(1-riskMatchDF$calibPreds>=.5,TRUE,FALSE))
+cmAdj <- conf_mat(riskMatchDF,truth=overOne_2,estimate=predClass)
+false_discovery_rateAdj <- cmAdj$table[2,1]/(cmAdj$table[2,2]+cmAdj$table[2,1]) #same as 1-PPV
+false_omission_rateAdj <- cmAdj$table[1,2]/(cmAdj$table[1,1]+cmAdj$table[1,2]) #same as 1-NPV
 
 
-withoutTests <- withoutTestsPreds %>% 
-  rename(preds = rawPreds) %>% 
-  select(blockNum,preds,calibPreds)
-withTests <- riskDF %>% 
-  rename(preds = rawPreds) %>% 
-  select(blockNum,preds,calibPreds)
-riskDF2 <- rbind(withTests,withoutTests)
-write_csv(riskDF2,"data/processed/riskDF.csv")
-
-##construct shap
-tree_rec2B <- recipe(overOne_2 ~ ., data = trainDF2) %>% 
-  update_role(blockNum, new_role="ID") %>% 
-  step_integer(all_nominal())
-#step_dummy(all_nominal_predictors()) #previously step_integer
-baked2 <- bake(
-  prep(tree_rec2B), 
-  has_role("predictor"),
-  new_data = trainDF2, 
-  composition = "matrix"
-)
-library(shapviz)
-outcomeShap <- shapviz(myModel2, X_pred = baked2, x=trainDF2)
-saveRDS(outcomeShap,file="data/processed/outcomeShap.rds")
-write_csv(trainDF2,"data/processed/trainDF2.csv")
