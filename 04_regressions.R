@@ -31,6 +31,12 @@ riskDF <- riskDF %>% select(-overOne_2) %>% distinct()
 riskDF$blockNum <- as.character(riskDF$blockNum)
 imputeDF2$blockNum <- as.character(imputeDF2$blockNum)
 rarDF <- imputeDF2 %>% left_join(riskDF,by=c("blockNum"="blockNum"))
+outcomeDF <- imputeDF %>% filter(tested) %>%
+  group_by(blockNum) %>% mutate(meanOutcome = mean(as.numeric(overOne_2)),
+                                meanOutcome = ifelse(meanOutcome>=0.5,TRUE,FALSE)) %>% 
+  ungroup() %>% distinct(blockNum,.keep_all=T)
+
+outcomeTestsDF <- imputeDF %>% filter(tested)
 
 #risk adjusted regressions
 rarW <- glm(tested~propWhiteBlockPop+preds+blockPopulation,data=rarDF,family="binomial") %>% summary()
@@ -50,15 +56,19 @@ rrA <- glm(tested~propAsianBlockPop+blockPopulation,data=rarDF,family="binomial"
 
 rrH <- glm(tested~propHispanicBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
+#outcome regressions using mean outcome, with blocks as observation
+outcomeW <- glm(meanOutcome~propWhiteBlockPop,data=outcomeDF,family="binomial") %>% summary()
+outcomeB <- glm(meanOutcome~propBlackBlockPop,data=outcomeDF,family="binomial") %>% summary()
+outcomeA <- glm(meanOutcome~propAsianBlockPop,data=outcomeDF,family="binomial") %>% summary()
+outcomeH <- glm(meanOutcome~propHispanicBlockPop,data=outcomeDF,family="binomial") %>% summary()
 
-#outcome regressions
-outcomeW <- glm(overOne_2~propWhiteBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
+#outcome regressions using tests as observations
+outcomeW_tests <- glm(overOne_2~propWhiteBlockPop,data=outcomeTestsDF,family="binomial") %>% summary()
+outcomeB_tests <- glm(overOne_2~propBlackBlockPop,data=outcomeTestsDF,family="binomial") %>% summary()
+outcomeA_tests <- glm(overOne_2~propAsianBlockPop,data=outcomeTestsDF,family="binomial") %>% summary()
+outcomeH_tests <- glm(overOne_2~propHispanicBlockPop,data=outcomeTestsDF,family="binomial") %>% summary()
 
-outcomeB <- glm(overOne_2~propBlackBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
-outcomeA <- glm(overOne_2~propAsianBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
-
-outcomeH <- glm(overOne_2~propHispanicBlockPop+blockPopulation,data=rarDF,family="binomial") %>% summary()
 
 getGLMResults <- function(mod) {
   c <- mod$coefficients[2]
@@ -83,12 +93,31 @@ rarBResults <- getGLMResults(rarB)
 rarHResults <- getGLMResults(rarH)
 rarAResults <- getGLMResults(rarA)
 
+#supplementary test regressions
+rrWResults <- getGLMResults(rrW)
+rrBResults <- getGLMResults(rrB)
+rrHResults <- getGLMResults(rrH)
+rrAResults <- getGLMResults(rrA)
+
+
 #outcome race results
 outcomeWResults <- getGLMResults(outcomeW)
 outcomeBResults <- getGLMResults(outcomeB)
 outcomeHResults <- getGLMResults(outcomeH)
 outcomeAResults <- getGLMResults(outcomeA)
 
+#supplementary test-level outcome regressions
+outcomeWResults_tests <- getGLMResults(outcomeW_tests)
+outcomeBResults_tests <- getGLMResults(outcomeB_tests)
+outcomeHResults_tests <- getGLMResults(outcomeH_tests)
+outcomeAResults_tests <- getGLMResults(outcomeA_tests)
+
+
+
+generateRegressionTable <- function(rarAResults,rarBResults,
+                                    rarHResults,rarWResults,
+                                    outcomeAResults,outcomeBResults,
+                                    outcomeHResults,outcomeWResults) {
 rarTable <- as.data.frame(rbind(rarAResults,rarBResults,
                   rarHResults,rarWResults))
 colnames(rarTable) <- c("Coefficient","Std. err",
@@ -106,20 +135,29 @@ rarTable$Increase <- paste0(rarTable$Increase," (",
                             rarTable$Upper,")")
 rarTable$Lower <- NULL
 rarTable$Upper <- NULL
-
 outcomeTable$Increase_O <- paste0(outcomeTable$Increase_O," (",
                                 outcomeTable$Lower_O,",",
                                 outcomeTable$Upper_O,")")
 outcomeTable$Lower_O <- NULL
 outcomeTable$Upper_O <- NULL
-
-
-
 regTable <- cbind(rarTable,outcomeTable)
 regTable$p <- ifelse(regTable$p==0,"<0.001",regTable$p)
 regTable$p_O <- ifelse(regTable$p_O==0,"<0.001",regTable$p_0)
+return(regTable)
+}
+
+regTable <- generateRegressionTable(rarAResults,rarBResults,
+                                    rarHResults,rarWResults,
+                                    outcomeAResults,outcomeBResults,
+                                    outcomeHResults,outcomeWResults)
+regTable2 <- generateRegressionTable(rrAResults,rrBResults,
+                                    rrHResults,rrWResults,
+                                    outcomeAResults_tests,outcomeBResults_tests,
+                                    outcomeHResults_tests,outcomeWResults_tests)
+
 
 write_csv(regTable,"data/processed/regressionTable.csv")
+write_csv(regTable2,"data/processed/regressionTableSupplement.csv")
 
 
 rarDF2 <- rarDF %>% pivot_longer(cols=c("asianPropBG",

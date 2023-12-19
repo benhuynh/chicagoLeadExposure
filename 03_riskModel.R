@@ -16,6 +16,12 @@ mlDF <- imputeDF %>% filter(tested) %>%
          blockNum = factor(blockNum),
          blockGroup = factor(blockGroup),
          )
+mlDF_grouped <- mlDF %>% group_by(blockNum) %>% 
+  mutate(outcome = mean(as.numeric(overOne_2)-1),
+         outcome = factor(ifelse(outcome>=0.5,TRUE,FALSE))) %>% 
+  ungroup() %>% distinct(blockNum,.keep_all=T)
+mlDF_grouped$overOne_2 <- mlDF_grouped$outcome
+mlDF_grouped$outcome <- NULL
 
 split_df2 <- group_initial_split(mlDF,group=blockNum) #keep blocks in same split
 trainDF2 <- training(split_df2)
@@ -192,3 +198,76 @@ baselineTrainDF2 <- trainDF2 %>% group_by(blockGroup) %>%
 baselineTrainDF3 <- baselineTrainDF2 %>% select(blockGroup,censusTract,CA,
                                                 bgMean,tractMean,caMean)
 
+#grouped ML test
+#make calibrated risk predictions
+mlDF_grouped$overOne_2 <- mlDF_grouped$outcome
+predSplits <- initial_split(mlDF_grouped,prop=1/2)
+split1 <- training(predSplits)
+split2 <- testing(predSplits)
+
+splitDF1 <- fitSplit(dataSplit = split1, testData=split2,gridNum=5)
+splitDF2 <- fitSplit(dataSplit = split2, testData=split1,gridNum=5)
+
+riskDF_grouped <- rbind(splitDF1,splitDF2)
+
+write_csv(riskDF_grouped,"data/processed/riskDF_pt1_grouped.csv")
+
+#make outcome predictions on blocks without tests
+imputeDF <- read_csv("data/processed/imputeDF.csv")
+imputeDF_grouped <- imputeDF %>%
+  select(-`1st Draw`,-`2-3 Minute`,-`5 Minute`,
+         -HHsInternetPropBG,-pCompletePlumbingFacilitiesBG,
+         -HHsHasComputerPropBG,-pOccupiedHousesBG,-sequential,
+         -pRenterOccupiedHousesBG,-`Date Sampled`) %>%  #remove redundant features
+  mutate(overOne_2 = factor(overOne_2),
+         censusTract = factor(censusTract),
+         CA = factor(CA),
+         blockNum = factor(blockNum),
+         blockGroup = factor(blockGroup)) %>% group_by(blockNum) %>% 
+  mutate(outcome = mean(as.numeric(overOne_2)-1),
+         outcome = factor(ifelse(outcome>=0.5,TRUE,FALSE))) %>% 
+  ungroup() %>% distinct(blockNum,.keep_all=T)
+imputeDF_grouped$overOne_2 <- imputeDF_grouped$outcome
+imputeDF_grouped$outcome <- NULL
+propensity_train <- imputeDF_grouped %>% filter(tested==T) %>% 
+  select(-tested)
+propensity_test <- imputeDF_grouped %>% filter(tested==F) %>% 
+  select(-tested)
+
+
+withoutTestsPreds <- fitSplit(dataSplit = propensity_train,
+                              testData=propensity_test,gridNum=5)
+
+
+withoutTests_grouped <- withoutTestsPreds %>% 
+  rename(preds = rawPreds) %>% 
+  select(blockNum,preds,calibPreds,overOne_2)
+withTests_grouped <- riskDF_grouped %>% 
+  rename(preds = rawPreds) %>% 
+  select(blockNum,preds,calibPreds,overOne_2)
+riskDF2_grouped <- rbind(withTests_grouped,withoutTests_grouped)
+write_csv(riskDF2_grouped,"data/processed/riskDF_grouped.csv")
+
+riskDF2_grouped$tested <- !is.na(riskDF2_grouped$overOne_2)
+riskDF2_grouped$predClass <- ifelse((1-riskDF2_grouped$calibPreds)>0.5,TRUE,FALSE)
+
+cmDF_grouped <- riskDF2_grouped %>% filter(!is.na(overOne_2))
+cmDF_grouped$predClass <- factor(cmDF_grouped$predClass)
+cmDF_grouped$overOne_2 <- factor(cmDF_grouped$overOne_2,levels=c("FALSE","TRUE"))
+
+cm_grouped <- conf_mat(cmDF_grouped,truth=overOne_2,estimate=predClass)
+false_discovery_rate <- cm_grouped$table[2,1]/(cm_grouped$table[2,2]+cm_grouped$table[2,1]) #same as 1-PPV
+false_omission_rate <- cm_grouped$table[1,2]/(cm_grouped$table[1,1]+cm_grouped$table[1,2]) #same as 1-NPV
+
+falseNegatives <- riskDF2_grouped %>% 
+  filter(predClass=="FALSE") %>% nrow() * false_omission_rate
+falsePositives <- riskDF2_grouped %>% 
+  filter(predClass=="TRUE") %>% nrow() * false_discovery_rate
+(riskDF2_grouped %>% filter(predClass=="TRUE") %>% nrow() + falseNegatives-
+    falsePositives)/nrow(riskDF2_grouped)
+
+
+riskDF2_grouped %>% filter(tested) %>%  filter(predClass=="TRUE") %>% nrow() /
+  riskDF2_grouped %>% filter(tested) %>% nrow()
+riskDF2_grouped %>% filter(!tested) %>%  filter(predClass=="TRUE") %>% nrow() /
+  riskDF2_grouped %>% filter(!tested) %>% nrow() 

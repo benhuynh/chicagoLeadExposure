@@ -98,6 +98,11 @@ meansVec <- ifelse(is.na(meansVec),min(meansVec,na.rm=T)/2,meansVec)
 simDF2$totalPopulation_MOE95 <- simDF2$totalPopulation_MOE/qnorm(.95)*qnorm(.975)
 simDF2$pAllChildrenUnder6BG_MOE95 <- simDF2$pAllChildrenUnder6BG_MOE/qnorm(.95)*qnorm(.975)
 
+#
+tpr <- 7381/(7381+807)
+fpr <- 2127/(2127+1824)
+
+((2127+7381)-(fpr*12139))/(tpr-fpr)
 #propagate uncertainty from ML predictions
 cmDF <- simDF %>% filter(!is.na(overOne_2))
 cmDF$predClass <- factor(cmDF$predClass)
