@@ -439,7 +439,14 @@ getDrawPredictions <- function(imputeDF,draw=1) {
            blockNum = factor(blockNum),
            blockGroup = factor(blockGroup),
     )
-  split_df2 <- group_initial_split(mlDF2,group=blockNum) #keep blocks in same split
+  mlDF2_grouped <- mlDF2 %>% group_by(blockNum) %>% 
+    mutate(outcome = mean(as.numeric(overOne_2)-1),
+           outcome = factor(ifelse(outcome>=0.5,TRUE,FALSE))) %>% 
+    ungroup() %>% distinct(blockNum,.keep_all=T)
+  mlDF2_grouped$overOne_2 <- mlDF2_grouped$outcome
+  mlDF2_grouped$outcome <- NULL
+  
+  split_df2 <- initial_split(mlDF2_grouped)
   trainDF2 <- training(split_df2)
   testDF2 <- testing(split_df2)
   tree_rec2 <- recipe(overOne_2 ~ ., data = trainDF2) %>% 
@@ -456,7 +463,7 @@ getDrawPredictions <- function(imputeDF,draw=1) {
     add_recipe(tree_rec2) %>% 
     add_model(tune_spec2)
   
-  trees_folds3 <- group_vfold_cv(trainDF2,group=blockNum,v=3)
+  trees_folds3 <- vfold_cv(trainDF2,v=3)
   
   
   tune_res_final2 <- tune_grid(
@@ -478,7 +485,7 @@ getDrawPredictions <- function(imputeDF,draw=1) {
     collect_metrics() %>% print()
   
   #make calibrated risk predictions
-  predSplits <- group_initial_split(mlDF2,group=blockNum,prop=1/2)
+  predSplits <- initial_split(mlDF2_grouped,prop=1/2)
   split1 <- training(predSplits)
   split2 <- testing(predSplits)
   
@@ -499,9 +506,16 @@ getDrawPredictions <- function(imputeDF,draw=1) {
            blockNum = factor(blockNum),
            blockGroup = factor(blockGroup),
     )
-  propensity_train <- imputeDF %>% filter(tested==T) %>% 
+  imputeDF_grouped <- imputeDF %>% group_by(blockNum) %>% 
+    mutate(outcome = mean(as.numeric(overOne_2)-1),
+           outcome = factor(ifelse(outcome>=0.5,TRUE,FALSE))) %>% 
+    ungroup() %>% distinct(blockNum,.keep_all=T)
+  imputeDF_grouped$overOne_2 <- imputeDF_grouped$outcome
+  imputeDF_grouped$outcome <- NULL
+  
+  propensity_train <- imputeDF_grouped %>% filter(tested==T) %>% 
     select(-tested)
-  propensity_test <- imputeDF %>% filter(tested==F) %>% 
+  propensity_test <- imputeDF_grouped %>% filter(tested==F) %>% 
     select(-tested)
   withoutTestsPreds <- fitSplit(dataSplit = propensity_train,
                                 testData=propensity_test,gridNum=10)
@@ -517,5 +531,62 @@ getDrawPredictions <- function(imputeDF,draw=1) {
   return(riskDF2)
 }
 
+getPrevalenceEstimate <- function(matchDF, riskDF) {
+  riskDF$overOne_2 <- factor(riskDF$overOne_2)
+  riskDF$predClass <- factor(ifelse(1-riskDF$calibPreds >= 0.5, TRUE, FALSE))
+  
+  if (levels(riskDF$predClass)[1] == "FALSE") {
+    eventLevel <- "second"
+  } else {
+    eventLevel <- "first"
+  }
+  
+  riskMatchDF <- riskDF %>% 
+    mutate(blockNum = factor(blockNum)) %>% 
+    filter(blockNum %in% matchDF$blockNum)
+
+  false_discovery_rateUntested <- 1 - ppv(riskMatchDF, truth = overOne_2, estimate = predClass, event_level = eventLevel)$.estimate
+  false_omission_rateUntested <- 1 - npv(riskMatchDF, truth = overOne_2, estimate = predClass, event_level = eventLevel)$.estimate
+  
+  testedDF <- riskDF %>% filter(!is.na(overOne_2))
+  untestedDF <- riskDF %>% filter(is.na(overOne_2))
+  testedDF$predClass <- testedDF$predClass
+  testedDF$overOne_2 <- factor(testedDF$overOne_2)
+  
+  false_discovery_rate <- 1 - ppv(testedDF, truth = overOne_2, 
+                                  estimate = predClass, event_level = eventLevel)$.estimate
+  false_omission_rate <- 1 - npv(testedDF, truth = overOne_2, 
+                                 estimate = predClass, event_level = eventLevel)$.estimate
+  
+  falseNegatives <- riskDF %>% 
+    filter(predClass=="FALSE") %>% nrow() * false_omission_rate
+  falsePositives <- riskDF %>% 
+    filter(predClass=="TRUE") %>% nrow() * false_discovery_rate
+  
+  falseNegativesAdj <- untestedDF %>% 
+    filter(predClass=="FALSE") %>% nrow() * false_omission_rateUntested +
+    testedDF %>% 
+    filter(predClass=="FALSE") %>% nrow() * false_omission_rate
+  falsePositivesAdj <- untestedDF %>% 
+    filter(predClass=="TRUE") %>% nrow() * false_discovery_rateUntested +
+    testedDF %>% 
+    filter(predClass=="TRUE") %>% nrow() * false_discovery_rate
+  
+  raw1 <- nrow(riskDF %>% filter(predClass=="TRUE"))
+  perc1 <- raw1 / nrow(riskDF)
+  raw2 <- raw1 + falseNegatives - falsePositives
+  perc2 <- raw2 / nrow(riskDF)
+  raw3 <- raw1 + falseNegativesAdj - falsePositivesAdj
+  perc3 <- raw3 / nrow(riskDF)
+  
+  
+  
+  resultDF <- data.frame(
+    Raw = c(raw1, raw2, raw3),
+    Percentage = c(perc1, perc2, perc3)
+  )
+  
+  return(resultDF)
+}
 
 
