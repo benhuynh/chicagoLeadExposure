@@ -50,4 +50,10 @@ testedDFC$blockOutcome <- factor(testedDFC$blockOutcome)
 
 
 
+##population weighted testing
+sum(simDF$predClass*simDF$blockPopulation)/sum(simDF$blockPopulation)
+testedSimDF <- simDF %>% filter(tested)
+sum(testedSimDF$predClass*testedSimDF$blockPopulation)/sum(testedSimDF$blockPopulation)
+untestedSimDF <- simDF %>% filter(!tested)
+sum(untestedSimDF$predClass*untestedSimDF$blockPopulation)/sum(untestedSimDF$blockPopulation)
 
