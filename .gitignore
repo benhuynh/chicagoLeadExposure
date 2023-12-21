@@ -53,3 +53,6 @@ rsconnect/
 *.pdf
 .DS_store
 confidential/censusapi.txt
+*.csv
+*.xlsx
+*.rds

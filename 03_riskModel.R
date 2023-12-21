@@ -15,7 +15,7 @@ mlDF <- imputeDF %>% filter(tested) %>%
          CA = factor(CA),
          blockNum = factor(blockNum),
          blockGroup = factor(blockGroup),
-         )
+         ) 
 mlDF_grouped <- mlDF %>% group_by(blockNum) %>% 
   mutate(outcome = mean(as.numeric(overOne_2)-1),
          outcome = factor(ifelse(outcome>=0.5,TRUE,FALSE))) %>% 
@@ -23,7 +23,8 @@ mlDF_grouped <- mlDF %>% group_by(blockNum) %>%
 mlDF_grouped$overOne_2 <- mlDF_grouped$outcome
 mlDF_grouped$outcome <- NULL
 
-split_df2 <- group_initial_split(mlDF,group=blockNum) #keep blocks in same split
+# split_df2 <- group_initial_split(mlDF,group=blockNum) #keep blocks in same split
+split_df2 <- initial_split(mlDF_grouped)
 trainDF2 <- training(split_df2)
 testDF2 <- testing(split_df2)
 tree_rec2 <- recipe(overOne_2 ~ ., data = trainDF2) %>% 
@@ -40,6 +41,7 @@ tune_wf2 <- workflow() %>%
   #add_formula(overOne_2 ~ .-blockNum) %>% 
   add_recipe(tree_rec2) %>% 
   add_model(tune_spec2)
+
 
 #random forest specification
 tune_spec2_rf <- rand_forest(
@@ -101,7 +103,7 @@ tune_res_final2 <- tune_grid(
 tune_res_final2 %>%
   tune::show_best(metric = "roc_auc",n = 5)
 
-best_tree2 <- tune_res_final2 %>%
+best_tree2 <- tune_res2 %>%
   select_best("roc_auc")
 
 
@@ -123,7 +125,8 @@ impObj2 <- lgb.importance(myModel2,percentage = F)
 
 
 #make calibrated risk predictions
-predSplits <- group_initial_split(mlDF,group=blockNum,prop=1/2)
+#predSplits <- group_initial_split(mlDF,group=blockNum,prop=1/2)
+predSplits <- initial_split(mlDF_grouped,prop=1/2)
 split1 <- training(predSplits)
 split2 <- testing(predSplits)
 
@@ -134,6 +137,7 @@ riskDF <- rbind(splitDF1,splitDF2)
 
 write_csv(riskDF,"data/processed/riskDF_pt1.csv")
 
+#to-do: make grouped prediction code below
 #make outcome predictions on blocks without tests
 imputeDF <- read_csv("data/processed/imputeDF.csv")
 imputeDF <- imputeDF %>%
@@ -146,9 +150,16 @@ imputeDF <- imputeDF %>%
          CA = factor(CA),
          blockNum = factor(blockNum),
          blockGroup = factor(blockGroup))
-propensity_train <- imputeDF %>% filter(tested==T) %>% 
+imputeDF_grouped <- imputeDF %>% group_by(blockNum) %>% 
+  mutate(outcome = mean(as.numeric(overOne_2)-1),
+         outcome = factor(ifelse(outcome>=0.5,TRUE,FALSE))) %>% 
+  ungroup() %>% distinct(blockNum,.keep_all=T)
+imputeDF_grouped$overOne_2 <- imputeDF_grouped$outcome
+imputeDF_grouped$outcome <- NULL
+
+propensity_train <- imputeDF_grouped %>% filter(tested==T) %>% 
   select(-tested)
-propensity_test <- imputeDF %>% filter(tested==F) %>% 
+propensity_test <- imputeDF_grouped %>% filter(tested==F) %>% 
   select(-tested)
 
 
