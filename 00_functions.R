@@ -116,35 +116,6 @@ rTruncNormCorrected <- function(n,m,SD) {
   return(normVec-correction)
 }
 
-simIQDensity <- function(simDF) {
-  iqMat <- matrix(nrow=nrow(simDF),ncol=1000)
-  for(i in 1:1000) {
-  coef1 <- runif(1,.38,.86)
-  coef2 <- runif(1,.12,.26)
-  coef3 <- runif(1,.07,.15)
-  bllIncreaseConstant <- runif(1,exp(.09),exp(.33))
-  simBGPopVec <- round(runif(nrow(simDF),simDF$totalPopulationBG-simDF$totalPopulation_MOE95,
-                             simDF$totalPopulationBG+simDF$totalPopulation_MOE95))
-  simPunder6Vec <- runif(nrow(simDF),simDF$pAllChildrenUnder6BG-simDF$pAllChildrenUnder6BG_MOE95,
-                         simDF$pAllChildrenUnder6BG+simDF$pAllChildrenUnder6BG_MOE95)
-  simPunder6Vec[simPunder6Vec<0] <- 0
-  simDF$simBGPop <- simBGPopVec
-  simDF$simPunder6 <- simPunder6Vec
-  simDF$simBlockPop = simDF$blockPopulation/simDF$totalPopulationBG*
-    simDF$simBGPop
-  simDF$simulatedTruth = rbinom(nrow(simDF),1,simDF$calibPreds)
-  simDF$expChildren <- simDF$simulatedTruth*simDF$simBlockPop*simDF$simPunder6
-  simDF$leadConcentration <- concentrationSampVec[,i]
-  simDF$baseLineBLL <- rTruncNormCorrected(nrow(simDF),SD=SD,m=meansVec)
-  simDF$baseLineBLL[simDF$baseLineBLL<0] <- 0
-  simDF$simBLL <- simDF$baseLineBLL/(bllIncreaseConstant^simDF$leadConcentration)
-  simDF$iqLoss <- mapply(calcIQLoss2,sim=simDF$simBLL,
-                         bl=simDF$baseLineBLL,c1=coef1,c2=coef2)
-  iqMat[,i] <- simDF$iqLoss
-  print(i)
-  }
-  return(iqMat)
-}
 races <- c("Asian","Black","Hispanic","White")
 
 simulateRacesForBlock <- function(row) {
@@ -182,22 +153,31 @@ getRaceEstimates <- function(dataset,tested=T) {
   proportionHispanic = round((totalHispanic / numObservations) * 100, 1)
   proportionWhite = round((totalWhite / numObservations) * 100, 1)
   
+  #total population estimates
+  medianBlockPop <- median(dataset$blockPopulation)
+  iqrBlockPop <- iqr(dataset$blockPopulation)
+  
   # Create a list to return the results, with percentages in parentheses
   results <- list(
-    Asian = paste(totalAsian, "(", proportionAsian, "%)", sep=""),
-    Black = paste(totalBlack, "(", proportionBlack, "%)", sep=""),
-    Hispanic = paste(totalHispanic, "(", proportionHispanic, "%)", sep=""),
-    White = paste(totalWhite, "(", proportionWhite, "%)", sep="")
+    Asian = paste(totalAsian, " (", proportionAsian, "%)", sep=""),
+    Black = paste(totalBlack, " (", proportionBlack, "%)", sep=""),
+    Hispanic = paste(totalHispanic, " (", proportionHispanic, "%)", sep=""),
+    White = paste(totalWhite, " (", proportionWhite, "%)", sep=""),
+    BlockPopulation = paste0(medianBlockPop, " (",iqrBlockPop,")")
   )
   
   return(results)
 }
 
 
-simFunc <- function(simDF,meansVec=meansVec,adjustBLL=T,
-                    calib=T) {
-  simMat <- matrix(nrow=10000,ncol=25)
-  for(i in 1:10000)  {
+simFunc <- function(simDF,adjustBLL=T,
+                    calib="calibrated",errorMetrics,niter=10000) {
+  fdrTested <- errorMetrics[1]
+  forTested <- errorMetrics[2]
+  fdrUntested <- errorMetrics[3]
+  forUntested <- errorMetrics[4]
+  simMat <- matrix(nrow=niter,ncol=25)
+  for(i in 1:niter)  {
     simDF_HCS <- simDF %>% select(CA,lower_Unfiltered,upper_Unfiltered) %>% distinct()
     simDF_HCS$simFiltered <- runif(nrow(simDF_HCS),simDF_HCS$lower_Unfiltered,simDF_HCS$upper_Unfiltered)/100
     simDF2 <- simDF %>% left_join(simDF_HCS %>% select(CA,simFiltered),by="CA")
@@ -216,13 +196,21 @@ simFunc <- function(simDF,meansVec=meansVec,adjustBLL=T,
     simDF2$simPunder6 <- simPunder6Vec
     simDF2$simBlockPop = simDF2$blockPopulation/simDF2$totalPopulationBG*
       simDF2$simBGPop
-    if(calib) {
+    if(calib=="calibrated") {
       simDF2$simulatedTruth = rbinom(nrow(simDF2),1,simDF2$calibPreds)
-    } else{
+    } else if(calib=="uncalibrated"){
       simDF2$simulatedTruth = rbinom(nrow(simDF2),1,simDF2$preds)
+    } else if(calib=="classification") {
+      simDF2$simulatedTruth = as.numeric(simDF2$predClass)
     }
-    simDF2$falsePos = rbinom(nrow(simDF2),1,false_discovery_rate)
-    simDF2$falseNeg = rbinom(nrow(simDF2),1,false_omission_rate)
+    
+    simDF2$falsePosTested = rbinom(nrow(simDF2),1,fdrTested)
+    simDF2$falseNegTested = rbinom(nrow(simDF2),1,forTested)
+    simDF2$falsePosUntested = rbinom(nrow(simDF2),1,fdrUntested)
+    simDF2$falseNegUntested = rbinom(nrow(simDF2),1,forUntested)
+    
+    simDF2$falsePos <- ifelse(simDF2$tested, simDF2$falsePosTested,simDF2$falsePosUntested)
+    simDF2$falseNeg <- ifelse(simDF2$tested, simDF2$falseNegTested,simDF2$falseNegUntested)
     simDF2 <- simDF2 %>% mutate(
       adjustedTruth = ifelse(simulatedTruth==1,simulatedTruth*(1-falsePos),
                              simulatedTruth+falseNeg)
@@ -531,25 +519,25 @@ getDrawPredictions <- function(imputeDF,draw=1) {
   return(riskDF2)
 }
 
-getPrevalenceEstimate <- function(matchDF, riskDF) {
-  riskDF$overOne_2 <- factor(riskDF$overOne_2)
-  riskDF$predClass <- factor(ifelse(1-riskDF$calibPreds >= 0.5, TRUE, FALSE))
+getPrevalenceEstimate <- function(matchDF, sDF,output="default") {
+  sDF$overOne_2 <- factor(sDF$overOne_2)
+  sDF$predClass <- factor(sDF$predClass)
   
-  if (levels(riskDF$predClass)[1] == "FALSE") {
+  if (levels(sDF$predClass)[1] == "FALSE") {
     eventLevel <- "second"
   } else {
     eventLevel <- "first"
   }
   
-  riskMatchDF <- riskDF %>% 
+  riskMatchDF <- sDF %>% 
     mutate(blockNum = factor(blockNum)) %>% 
     filter(blockNum %in% matchDF$blockNum)
 
   false_discovery_rateUntested <- 1 - ppv(riskMatchDF, truth = overOne_2, estimate = predClass, event_level = eventLevel)$.estimate
   false_omission_rateUntested <- 1 - npv(riskMatchDF, truth = overOne_2, estimate = predClass, event_level = eventLevel)$.estimate
   
-  testedDF <- riskDF %>% filter(!is.na(overOne_2))
-  untestedDF <- riskDF %>% filter(is.na(overOne_2))
+  testedDF <- sDF %>% filter(!is.na(overOne_2))
+  untestedDF <- sDF %>% filter(is.na(overOne_2))
   testedDF$predClass <- testedDF$predClass
   testedDF$overOne_2 <- factor(testedDF$overOne_2)
   
@@ -558,9 +546,9 @@ getPrevalenceEstimate <- function(matchDF, riskDF) {
   false_omission_rate <- 1 - npv(testedDF, truth = overOne_2, 
                                  estimate = predClass, event_level = eventLevel)$.estimate
   
-  falseNegatives <- riskDF %>% 
+  falseNegatives <- sDF %>% 
     filter(predClass=="FALSE") %>% nrow() * false_omission_rate
-  falsePositives <- riskDF %>% 
+  falsePositives <- sDF %>% 
     filter(predClass=="TRUE") %>% nrow() * false_discovery_rate
   
   falseNegativesAdj <- untestedDF %>% 
@@ -572,12 +560,12 @@ getPrevalenceEstimate <- function(matchDF, riskDF) {
     testedDF %>% 
     filter(predClass=="TRUE") %>% nrow() * false_discovery_rate
   
-  raw1 <- nrow(riskDF %>% filter(predClass=="TRUE"))
-  perc1 <- raw1 / nrow(riskDF)
+  raw1 <- nrow(sDF %>% filter(predClass=="TRUE"))
+  perc1 <- raw1 / nrow(sDF)
   raw2 <- raw1 + falseNegatives - falsePositives
-  perc2 <- raw2 / nrow(riskDF)
+  perc2 <- raw2 / nrow(sDF)
   raw3 <- raw1 + falseNegativesAdj - falsePositivesAdj
-  perc3 <- raw3 / nrow(riskDF)
+  perc3 <- raw3 / nrow(sDF)
   
   
   
@@ -586,7 +574,12 @@ getPrevalenceEstimate <- function(matchDF, riskDF) {
     Percentage = c(perc1, perc2, perc3)
   )
   
-  return(resultDF)
+  if(output=="metrics") {
+    return(c(false_discovery_rate,false_omission_rate,
+             false_discovery_rateUntested,false_omission_rateUntested))
+  } else{
+    return(resultDF)  
+  }
 }
 
 

@@ -56,3 +56,4 @@ confidential/censusapi.txt
 *.csv
 *.xlsx
 *.rds
+*.jpeg
