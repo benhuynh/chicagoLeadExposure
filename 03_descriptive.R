@@ -77,17 +77,48 @@ sum(testedDF$`5 Minute` >= 15)/nrow(testedDF)
 
 #tests representativeness of data
 allBlocksDF <- imputeDF %>% distinct(blockNum, .keep_all=T)
+allBlocksDF$blockNum <- as.character(allBlocksDF$blockNum)
 
 
 untestedDemographics <- getRaceEstimates(untestedDF,tested=F)
 testedDemographics <- getRaceEstimates(testedDF,tested=F)
+allBlocksDemographics <- getRaceEstimates(allBlocksDF,tested=F)
+
 
 demoDF <- as.data.frame(cbind(t(as.data.frame(testedDemographics)),
-                t(as.data.frame(untestedDemographics))))
+                t(as.data.frame(untestedDemographics)))
+                )
 colnames(demoDF) <- c("Tested","Untested")
-
+demoDF$Total <- t(as.data.frame(allBlocksDemographics))
 
 write_csv(demoDF,"data/processed/demoDF.csv")
+
+
+#building characteristics
+buildingAge <- read_csv("data/processed/buildingAge.csv")
+buildingAge$age <- 2023-buildingAge$year
+buildingAge2 <- buildingAge %>% 
+  filter(!is.na(cxy_block_id)) %>% 
+  mutate(blockNum = paste0("17031",cxy_tract_id,cxy_block_id)) %>% 
+  left_join(allBlocksDF %>% select(blockNum,tested)) %>% 
+  group_by(blockNum) %>% 
+  mutate(nBlocks = n()) %>% ungroup() %>% 
+  filter(!is.na(tested))
+buildingAge3 <- buildingAge2 %>% 
+  group_by(tested) %>% 
+  summarize(medianBuildingsPerBlock = median(nBlocks),
+            iqrBuildingsPerBlock = iqr(nBlocks),
+            medianAge = median(age),
+            iqrAge = iqr(age))
+totalVec <- c("Total",median(buildingAge2$nBlocks),
+              iqr(buildingAge2$nBlocks),
+              median(buildingAge2$age),
+              iqr(buildingAge2$age))
+buildingDF <- as.data.frame(t(rbind(buildingAge3,totalVec)))
+write_csv(t(buildingDF),"data/processed/buildingAgeStats.csv")
+
+
+
 #percentage of tests and blocks with lead > 1ppb
 
 nrow(testedDF %>% filter(overOne_2))/nrow(testedDF)

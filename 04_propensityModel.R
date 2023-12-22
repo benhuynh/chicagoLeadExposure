@@ -19,21 +19,13 @@ propensityDF <- imputeDF %>%
          tested = factor(tested)
   ) %>% distinct(blockNum,.keep_all=T)
 
-propensityPredsDF <- read_csv("data/processed/propensityPredsDF.csv")
-
-m.out1 <- matchit(1-as.logical(tested)~.pred_TRUE,
-                  data=propensityPredsDF,method="nearest",caliper=.001,replace = T)
-data.matched1 <- match.data(m.out1)
-matchedTestedDF1 <- data.matched1 %>% filter(tested==T)
-
-
 m.out2 <- matchit(1-as.logical(tested)~whitePropBG+blackPropBG+asianPropBG+hispanicPropBG+
                     educationHSPropBG+educationBachelorsPropBG+nBlocks+pOld,
                   data=propensityDF,method="nearest",caliper=.15,replace = T)
 data.matched2 <- match.data(m.out2)
 plot(m.out2, type = "jitter", interactive = FALSE)
 matchedTestedDF2 <- data.matched2 %>% filter(tested==T)
-
+write_csv(matchedTestedDF2,"data/processed/matchedTestedDF2.csv")
 
 prevEstimate <- getPrevalenceEstimate(matchedTestedDF2,riskDF2)
 
