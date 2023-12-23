@@ -26,3 +26,16 @@ ggplot(data=leadDF3,aes(x=`2-3 Minute`)) +
   scale_x_continuous(expand = c(0, 0),
                      breaks=c(0,5,10,15)) + scale_y_continuous(expand = c(0, 0))
 ggsave("figs/leadPPBDensity.pdf",width=3,height=3)
+
+
+#number of tests per census block
+imputeDF <- read_csv("data/processed/imputeDF.csv")
+numTestDF <- imputeDF %>% group_by(blockNum) %>% 
+  mutate(numTests = sum(tested)) %>% ungroup() %>% 
+  distinct(blockNum, .keep_all=T) %>% filter(tested) %>% 
+  mutate(numTests2 = ifelse(numTests>=15,15,numTests))
+
+ggplot(numTestDF,aes(x=numTests2)) +
+  geom_histogram(binwidth = 1) + theme_classic() +
+  scale_x_continuous(breaks=seq(1:15))
+
