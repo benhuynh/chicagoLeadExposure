@@ -45,7 +45,8 @@ childrenDF$blockNum <- as.character(childrenDF$blockNum)
 convertToSimDF <- function(rDF) {
   rDF <- rDF %>% distinct(blockNum,.keep_all=T)
   rDF$blockNum <- as.character(rDF$blockNum)
-  simDF <- childrenDF %>% left_join(rDF,by=c("blockNum"="blockNum")) %>% 
+  simDF <- childrenDF %>% select(!overOne_2) %>% 
+    left_join(rDF,by=c("blockNum"="blockNum")) %>% 
     distinct(blockNum,.keep_all=T)
   simDF <- simDF %>% left_join(tractsToCA,by=c("censusTract"="GEOID20")) %>% 
     left_join(hcsDF2,by=c("CA"="CA"))
@@ -110,8 +111,8 @@ concentrationSampVec <- ifelse(concentrationSampVec>10,10,concentrationSampVec)
 
 #convert MoEs from 90% CIs to 95% CIs
 
-metricVec <- getPrevalenceEstimate(matchedTestedDF2,riskDF,output="metrics")
-metricVec_testLevel <- getPrevalenceEstimate(matchedTestedDF2,riskDF_testLevel,output="metrics")
+metricVec <- getPrevalenceEstimate(matchedTestedDF2,simDF2,output="metrics")
+metricVec_testLevel <- getPrevalenceEstimate(matchedTestedDF2,simDF2_testLevel,output="metrics")
 
 
 
@@ -128,17 +129,44 @@ nrow(simDF %>% filter(predClass))/nrow(simDF)
     falsePositivesAdj)/nrow(simDF)
 
 
-simMatDF <- simFunc(simDF=simDF2,errorMetrics=metricVec)
+simMatDF <- simFunc(simDF=simDF2,errorMetrics=metricVec,
+                    concentrationSampVec=concentrationSampVec)
 write_csv(simMatDF,paste0("data/processed/simResults_",now(),".csv"))
 
-simMatDF_classif <- simFunc(simDF=simDF2,errorMetrics=metricVec,calib="classification")
+simMatDF_classif <- simFunc(simDF=simDF2,errorMetrics=metricVec,
+                            calib="classification",
+                            concentrationSampVec=concentrationSampVec)
 write_csv(simMatDF,paste0("data/processed/simResults_classif_",now(),".csv"))
 
-simMatDF_testLevel <- simFunc(simDF=simDF2_testLevel,errorMetrics=metricVec_testLevel,calib="classification")
+simMatDF_testLevel <- simFunc(simDF=simDF2_testLevel,
+                              errorMetrics=metricVec_testLevel,
+                              calib="classification",
+                              concentrationSampVec=concentrationSampVec)
 write_csv(simMatDF_testLevel,paste0("data/processed/simResults_testLevel_",now(),".csv"))
 
-simMatDF_bll_unadj <- simFunc(simDF=simDF2,adjustBLL=F,calib="classification",errorMetrics=metricVec)
+simMatDF_bll_unadj <- simFunc(simDF=simDF2,adjustBLL=F,
+                              calib="classification",errorMetrics=metricVec,
+                              concentrationSampVec=concentrationSampVec)
 write_csv(simMatDF_bll_unadj,paste0("data/processed/simResults_bll_unadj_",now(),".csv"))
+
+
+#stratify by tested status
+simDF_untestedOnly <- simDF2 %>% filter(!tested)
+simDF_testedOnly <- simDF2 %>% filter(tested)
+
+concMatUntested <- concentrationSampVec[simDF2$tested==FALSE,]
+concMatTested <- concentrationSampVec[simDF2$tested==TRUE,]
+
+
+simMatDF_untestedOnly <- simFunc(simDF=simDF_untestedOnly,
+                                 errorMetrics=metricVec,calib="classification",
+                                 concentrationSampVec=concMatUntested)
+simMatDF_testedOnly <- simFunc(simDF=simDF_testedOnly,errorMetrics=metricVec,
+                               calib="classification",
+                               concentrationSampVec=concMatTested)
+
+
+
 
 summary(simMatDF)
 
@@ -149,11 +177,48 @@ simAggTable_classif <- generateSimAggTable(simMatDF_classif)
 simAggTable_bll_unadj <- generateSimAggTable(simMatDF_bll_unadj)
 simAggTable_testLevel <- generateSimAggTable(simMatDF_testLevel)
 
+simAggTable_untested <- generateSimAggTable(simMatDF_untestedOnly)
+simAggTable_tested <- generateSimAggTable(simMatDF_testedOnly)
+
+sPrev <- getPrevalenceEstimate(matchedTestedDF2,simDF2)
+sPrevTested <- getPrevalenceEstimate(matchedTestedDF2,simDF2 %>% filter(tested))
+sPrevunTested <- getPrevalenceEstimate(matchedTestedDF2,simDF2 %>% filter(!tested))
+untestedSimDF <- simDF2 %>% filter(!tested)
+testedSimDF <- simDF2 %>% filter(tested)
+
+
+fdrTested <- metricVec[1]
+forTested <- metricVec[2]
+fdrUntested <- metricVec[3]
+forUntested <- metricVec[4]
+
+falseNegatives <- untestedSimDF %>% 
+  filter(predClass=="FALSE") %>% nrow() * forTested
+falsePositives <- untestedSimDF %>% 
+  filter(predClass=="TRUE") %>% nrow() * fdrTested
+
+falseNegativesAdj <- untestedSimDF %>% 
+  filter(predClass=="FALSE") %>% nrow() * forUntested
+falsePositivesAdj <- untestedSimDF %>% 
+  filter(predClass=="TRUE") %>% nrow() * fdrUntested
+
+r1 <- nrow(untestedSimDF %>% filter(predClass=="TRUE"))
+r2 <- nrow(untestedSimDF %>% filter(predClass=="TRUE")) + falseNegatives-falsePositives
+r3 <- nrow(untestedSimDF %>% filter(predClass=="TRUE")) + falseNegativesAdj-falsePositivesAdj
+
+c(r1,r2,r3)/nrow(untestedSimDF)
+
+
+
+
 
 write_csv(simAggTable2,paste0("data/processed/simAggTable_",now(),".csv"))
 write_csv(simAggTable_classif,paste0("data/processed/simAggTable_classif_",now(),".csv"))
 write_csv(simAggTable_bll_unadj,paste0("data/processed/simAggTable_bll_unadj_",now(),".csv"))
 write_csv(simAggTable_testLevel,paste0("data/processed/simAggTable_testLevel_",now(),".csv"))
+
+write_csv(simAggTable_untested,paste0("data/processed/simAggTable_untested_",now(),".csv"))
+write_csv(simAggTable_tested,paste0("data/processed/simAggTable_tested_",now(),".csv"))
 
 
 #calculate block-level outcomes

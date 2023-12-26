@@ -1,5 +1,7 @@
 #Purpose: Generates density plots for Figure 1
 library(readr)
+library(ggplot2)
+library(dplyr)
 buildingAge <- read_csv("data/processed/buildingAge.csv")
 buildingAge$age <- 2022-buildingAge$year
 leadDF <- read_csv("data/processed/leadExposure_final.csv")
@@ -36,6 +38,8 @@ numTestDF <- imputeDF %>% group_by(blockNum) %>%
   mutate(numTests2 = ifelse(numTests>=15,15,numTests))
 
 ggplot(numTestDF,aes(x=numTests2)) +
-  geom_histogram(binwidth = 1) + theme_classic() +
-  scale_x_continuous(breaks=seq(1:15))
+  geom_histogram(binwidth = 1,fill="#b5bf7b") + theme_classic() +
+  scale_x_continuous(expand=c(0,0),breaks=seq(1:15)) + xlab("Tests per block") +
+  ylab("Blocks") + scale_y_continuous(expand=c(0,0))
+ggsave("figs/numTestsPerBlock.pdf",width=3,height=3)
 
