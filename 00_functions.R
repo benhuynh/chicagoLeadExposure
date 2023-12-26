@@ -171,7 +171,7 @@ getRaceEstimates <- function(dataset,tested=T) {
 
 
 simFunc <- function(simDF,adjustBLL=T,
-                    calib="calibrated",errorMetrics,niter=10000) {
+                    calib="calibrated",errorMetrics,niter=10000,concentrationSampVec) {
   fdrTested <- errorMetrics[1]
   forTested <- errorMetrics[2]
   fdrUntested <- errorMetrics[3]
