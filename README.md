@@ -2,7 +2,7 @@
 
 Reproducible code for our manuscript `Estimated childhood lead exposure from drinking water in Chicago`. 
 
-Data files can be found at `link`. After downloading necessary data files, run the code in numerical order.
+Almost all data files are publicly available and are described in the manuscript. After downloading necessary data files, run the code in numerical order. The data from the Healthy Chicago Surveys are not publicly available, but the code can be easily modified to run without it.
 
 Please direct any corrections or inquiries to bhuynh@jhu.edu.
 
