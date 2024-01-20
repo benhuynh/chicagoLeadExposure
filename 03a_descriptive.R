@@ -122,11 +122,3 @@ write_csv(t(buildingDF),"data/processed/buildingAgeStats.csv")
 #percentage of tests and blocks with lead > 1ppb
 
 nrow(testedDF %>% filter(overOne_2))/nrow(testedDF)
-
-blockLeadDF <- testedDF %>% 
-  mutate(blockNum==factor(blockNum)) %>% 
-  group_by(blockNum) %>% 
-  summarize(blockLead = mean(as.numeric(overOne_2))) %>% 
-  mutate(blockClass = ifelse(blockLead>=.5,T,F))
-
-

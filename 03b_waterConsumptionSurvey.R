@@ -1,4 +1,4 @@
-
+#read CDPH data, creates plot of drinking water source by CA
 tractsToCA <- read_csv("data/2020 Census Tracts to Chicago Community Area Equivalency File - Sheet1.csv")
 tractsToCA$COMMUNIT_1 <- toupper(tractsToCA$COMMUNIT_1)
 tractsToCA <- tractsToCA %>% 
@@ -31,8 +31,6 @@ colnames(caNum) <-
     "RSE_Unfiltered",
     "CA"
     )
-#match with CA numbers to make sure correct
-#
 write_csv(caNum,"data/processed/hcsResults.csv")
 
 nc = st_read("data/Comm_20Areas__1_/CommAreas.shp")

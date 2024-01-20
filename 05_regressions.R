@@ -1,3 +1,4 @@
+#calculates regressions for risk of lead exposure and screening odds
 library(readr)
 library(ggplot2)
 library(ggdensity)
