@@ -144,6 +144,17 @@ missingDF <- propensitiesDF %>% select(blockNum,censusTract,tested,pctW) %>%
   distinct(censusTract,.keep_all=T)
 tractMapDF5 <- tractMapDF2 %>% left_join(missingDF,by=c("GEOID"="censusTract"))
 
+tractMapFinalDF <- tractMapDF5
+tractMapFinalDF$tested <- NULL
+tractMapFinalDF$testingRate <- tractMapFinalDF$rate
+tractMapFinalDF$rate <- NULL
+tractMapFinalDF$estimatedRisk <- tractMapDF3$medPred
+tractMapFinalDF$rawPrevalence <- tractMapDF4$rate
+tractMapFinalDF$pMinoritized <- 100-tractMapFinalDF$pctW
+tractMapFinalDF$pctW <- NULL
+tractMapFinalDF$geometry <- NULL
+tractMapFinalDF$blockNum <- NULL
+write_csv(tractMapFinalDF,"data/processed/tractMapFinalDF.csv")
 
 testingRatesPlot <- ggplot() + geom_sf(data=tractMapDF5, aes(fill=rate)) +
   scale_fill_distiller(type="seq",palette=9,direction=1,
@@ -153,7 +164,7 @@ testingRatesPlot <- ggplot() + geom_sf(data=tractMapDF5, aes(fill=rate)) +
   ggthemes::theme_map() + ggtitle("Testing rates") +
   theme(plot.title = element_text(size = 8, hjust = 0.5))
 
-pctPOCPlot <- ggplot() + geom_sf(data=tractMapDF5, aes(fill=1-pctW)) +
+pctPOCPlot <- ggplot() + geom_sf(data=tractMapDF5, aes(fill=100-pctW)) +
   scale_fill_distiller(type="seq",palette=9,direction=1,
                         name="% POC",
                         

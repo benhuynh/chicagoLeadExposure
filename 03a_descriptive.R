@@ -78,6 +78,8 @@ sum(testedDF$`5 Minute` >= 15)/nrow(testedDF)
 #tests representativeness of data
 allBlocksDF <- imputeDF %>% distinct(blockNum, .keep_all=T)
 allBlocksDF$blockNum <- as.character(allBlocksDF$blockNum)
+testedBlocksDF <- allBlocksDF %>% filter(tested)
+untestedBlocksDF <- allBlocksDF %>% filter(!tested)
 
 
 untestedDemographics <- getRaceEstimates(untestedDF,tested=F)
@@ -93,6 +95,17 @@ demoDF$Total <- t(as.data.frame(allBlocksDemographics))
 
 write_csv(demoDF,"data/processed/demoDF.csv")
 
+median(testedDF$blockPopulation)
+paste("(", quantile(testedBlocksDF$blockPopulation, probs = 0.25), ",",
+      quantile(testedBlocksDF$blockPopulation, probs = 0.75),")", sep="")
+median(untestedBlocksDF$blockPopulation)
+paste("(", quantile(untestedBlocksDF$blockPopulation, probs = 0.25), ",",
+      quantile(untestedBlocksDF$blockPopulation, probs = 0.75),")", sep="")
+median(allBlocksDF$blockPopulation)
+paste("(", quantile(allBlocksDF$blockPopulation, probs = 0.25), ",",
+      quantile(allBlocksDF$blockPopulation, probs = 0.75),")", sep="")
+
+
 
 #building characteristics
 buildingAge <- read_csv("data/processed/buildingAge.csv")
@@ -104,18 +117,30 @@ buildingAge2 <- buildingAge %>%
   group_by(blockNum) %>% 
   mutate(nBlocks = n()) %>% ungroup() %>% 
   filter(!is.na(tested))
-buildingAge3 <- buildingAge2 %>% 
-  group_by(tested) %>% 
-  summarize(medianBuildingsPerBlock = median(nBlocks),
-            iqrBuildingsPerBlock = iqr(nBlocks),
-            medianAge = median(age),
-            iqrAge = iqr(age))
-totalVec <- c("Total",median(buildingAge2$nBlocks),
-              iqr(buildingAge2$nBlocks),
-              median(buildingAge2$age),
-              iqr(buildingAge2$age))
+
+buildingAge3 <- buildingAge2 %>%
+  group_by(tested) %>%
+  summarize(
+    medianBuildingsPerBlock = median(nBlocks),
+    percentilesBuildingsPerBlock = paste("(", quantile(nBlocks, probs = 0.25), ",",
+                                         quantile(nBlocks, probs = 0.75),")", sep=""),
+    medianAge = median(age),
+    percentilesAge = paste("(", quantile(age, probs = 0.25), ",",
+                           quantile(age, probs = 0.75),")", sep="")
+  )
+
+totalVec <- c(
+  "Total",
+  median(buildingAge2$nBlocks),
+  paste("(", paste(quantile(buildingAge2$nBlocks, probs = c(0.25, 0.75), na.rm = TRUE), collapse=", "), ")", sep=""),
+  median(buildingAge2$age),
+  paste("(", paste(quantile(buildingAge2$age, probs = c(0.25, 0.75), na.rm = TRUE), collapse=", "), ")", sep="")
+)
+
+
+
 buildingDF <- as.data.frame(t(rbind(buildingAge3,totalVec)))
-write_csv(t(buildingDF),"data/processed/buildingAgeStats.csv")
+write_csv(buildingDF,"data/processed/buildingAgeStats.csv")
 
 
 
